@@ -40,24 +40,62 @@ export class ControlCharts {
         };
 
         this.resize();
+
+        // スマホ画面や動的レイアウト変更に対応するResizeObserver
+        if (window.ResizeObserver) {
+            this.resizeObserver = new ResizeObserver(() => {
+                this.resize();
+            });
+            if (this.timeCanvas) this.resizeObserver.observe(this.timeCanvas);
+            if (this.phaseCanvas) this.resizeObserver.observe(this.phaseCanvas);
+        }
     }
 
     resize() {
         if (this.timeCanvas) {
-            const rect = this.timeCanvas.getBoundingClientRect();
-            this.tWidth = rect.width;
-            this.tHeight = rect.height;
-            this.timeCanvas.width = this.tWidth * this.dpr;
-            this.timeCanvas.height = this.tHeight * this.dpr;
+            let rect = this.timeCanvas.getBoundingClientRect();
+            let w = rect.width;
+            let h = rect.height;
+
+            // スマホや非表示からの復帰時のゼロチェック・フォールバック
+            if (w <= 0 || h <= 0) {
+                const parent = this.timeCanvas.parentElement;
+                if (parent) {
+                    const pRect = parent.getBoundingClientRect();
+                    w = pRect.width || w;
+                    h = pRect.height || h;
+                }
+            }
+            if (w <= 0) w = 320;
+            if (h <= 0) h = 200;
+
+            this.tWidth = w;
+            this.tHeight = h;
+            this.timeCanvas.width = w * this.dpr;
+            this.timeCanvas.height = h * this.dpr;
             this.tCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
         }
 
         if (this.phaseCanvas) {
-            const rect = this.phaseCanvas.getBoundingClientRect();
-            this.pWidth = rect.width;
-            this.pHeight = rect.height;
-            this.phaseCanvas.width = this.pWidth * this.dpr;
-            this.phaseCanvas.height = this.pHeight * this.dpr;
+            let rect = this.phaseCanvas.getBoundingClientRect();
+            let w = rect.width;
+            let h = rect.height;
+
+            if (w <= 0 || h <= 0) {
+                const parent = this.phaseCanvas.parentElement;
+                if (parent) {
+                    const pRect = parent.getBoundingClientRect();
+                    w = pRect.width || w;
+                    h = pRect.height || h;
+                }
+            }
+            if (w <= 0) w = 320;
+            if (h <= 0) h = 200;
+
+            this.pWidth = w;
+            this.pHeight = h;
+            this.phaseCanvas.width = w * this.dpr;
+            this.phaseCanvas.height = h * this.dpr;
             this.pCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
         }
     }
@@ -107,9 +145,13 @@ export class ControlCharts {
      * 時系列応答グラフ（角度＆目標角度＆トルク）
      */
     renderTimeHistory(physics) {
+        if (!this.tWidth || this.tWidth < 20 || !this.tHeight || this.tHeight < 20) {
+            this.resize();
+        }
+
         const ctx = this.tCtx;
-        const w = this.tWidth;
-        const h = this.tHeight;
+        const w = this.tWidth || 320;
+        const h = this.tHeight || 200;
 
         ctx.fillStyle = this.colors.bg;
         ctx.fillRect(0, 0, w, h);
@@ -220,9 +262,13 @@ export class ControlCharts {
      * 相平面（Phase Plane: θ vs dθ/dt）プロット
      */
     renderPhasePlane(physics) {
+        if (!this.pWidth || this.pWidth < 20 || !this.pHeight || this.pHeight < 20) {
+            this.resize();
+        }
+
         const ctx = this.pCtx;
-        const w = this.pWidth;
-        const h = this.pHeight;
+        const w = this.pWidth || 320;
+        const h = this.pHeight || 200;
 
         ctx.fillStyle = this.colors.bg;
         ctx.fillRect(0, 0, w, h);

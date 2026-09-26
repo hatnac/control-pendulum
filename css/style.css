@@ -471,14 +471,16 @@ kbd {
 }
 
 .chart-box {
-    flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: 230px;
+    min-height: 240px;
+    height: 270px;
 }
 
 .chart-canvas-wrapper {
     flex: 1;
+    min-height: 200px;
+    height: 220px;
     position: relative;
     background: #0f172a;
     border-radius: var(--radius-sm);
@@ -487,6 +489,9 @@ kbd {
 }
 
 canvas#timeCanvas, canvas#phaseCanvas {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
     display: block;
@@ -621,7 +626,7 @@ input[type="range"] {
    ======================================================== */
 @media (max-width: 860px) {
     body {
-        padding-bottom: 20px;
+        padding-bottom: 30px;
     }
 
     header {
@@ -634,27 +639,31 @@ input[type="range"] {
 
     .mobile-nav-tabs {
         display: flex;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background: rgba(15, 23, 42, 0.95);
+        backdrop-filter: blur(8px);
     }
 
     .app-container {
-        display: block;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
         padding: 10px;
     }
 
-    /* モバイルタブの表示・非表示切替 */
+    /* スマホでも全セクションを常時表示（サイズ0pxバグを根本解決） */
     .tab-section {
-        display: none;
-    }
-
-    .tab-section.tab-active {
-        display: flex;
+        display: flex !important;
+        scroll-margin-top: 55px;
     }
 
     /* シミュレータ画面のスマホ最適化 */
     .canvas-wrapper {
-        height: 48vh;
-        min-height: 260px;
-        max-height: 400px;
+        height: 44vh;
+        min-height: 250px;
+        max-height: 380px;
     }
 
     .slider-track {
@@ -687,8 +696,13 @@ input[type="range"] {
     }
 
     .chart-box {
-        min-height: 240px;
-        height: 38vh;
+        min-height: 220px;
+        height: 240px;
+    }
+
+    .chart-canvas-wrapper {
+        min-height: 180px;
+        height: 190px;
     }
 
     /* 設定セクションのスマホ最適化 */

@@ -352,13 +352,35 @@ class PendulumApp {
                 const targetTab = btn.dataset.tab;
                 tabBtns.forEach(b => b.classList.toggle('active', b === btn));
 
-                document.querySelectorAll('.tab-section').forEach(sec => {
-                    sec.classList.toggle('tab-active', sec.id === `tab-${targetTab}`);
-                });
+                const targetElem = document.getElementById(`tab-${targetTab}`);
+                if (targetElem) {
+                    targetElem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
 
-                setTimeout(() => this.handleResize(), 50);
+                // 描画サイズの再確認
+                this.handleResize();
+                setTimeout(() => this.handleResize(), 100);
             });
         });
+
+        // スクロール位置に応じてタブのハイライトを自動連動
+        let scrollTimeout = null;
+        window.addEventListener('scroll', () => {
+            if (scrollTimeout) return;
+            scrollTimeout = setTimeout(() => {
+                scrollTimeout = null;
+                const sections = ['sim', 'charts', 'settings'].map(id => document.getElementById(`tab-${id}`));
+                const scrollPos = window.scrollY + 120;
+                for (let i = sections.length - 1; i >= 0; i--) {
+                    const sec = sections[i];
+                    if (sec && sec.offsetTop <= scrollPos) {
+                        const id = sec.id.replace('tab-', '');
+                        tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === id));
+                        break;
+                    }
+                }
+            }, 60);
+        }, { passive: true });
     }
 
     initShareModal() {

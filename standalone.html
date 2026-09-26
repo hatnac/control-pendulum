@@ -480,14 +480,16 @@ kbd {
 }
 
 .chart-box {
-    flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: 230px;
+    min-height: 240px;
+    height: 270px;
 }
 
 .chart-canvas-wrapper {
     flex: 1;
+    min-height: 200px;
+    height: 220px;
     position: relative;
     background: #0f172a;
     border-radius: var(--radius-sm);
@@ -496,6 +498,9 @@ kbd {
 }
 
 canvas#timeCanvas, canvas#phaseCanvas {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
     display: block;
@@ -630,7 +635,7 @@ input[type="range"] {
    ======================================================== */
 @media (max-width: 860px) {
     body {
-        padding-bottom: 20px;
+        padding-bottom: 30px;
     }
 
     header {
@@ -643,27 +648,31 @@ input[type="range"] {
 
     .mobile-nav-tabs {
         display: flex;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background: rgba(15, 23, 42, 0.95);
+        backdrop-filter: blur(8px);
     }
 
     .app-container {
-        display: block;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
         padding: 10px;
     }
 
-    /* モバイルタブの表示・非表示切替 */
+    /* スマホでも全セクションを常時表示（サイズ0pxバグを根本解決） */
     .tab-section {
-        display: none;
-    }
-
-    .tab-section.tab-active {
-        display: flex;
+        display: flex !important;
+        scroll-margin-top: 55px;
     }
 
     /* シミュレータ画面のスマホ最適化 */
     .canvas-wrapper {
-        height: 48vh;
-        min-height: 260px;
-        max-height: 400px;
+        height: 44vh;
+        min-height: 250px;
+        max-height: 380px;
     }
 
     .slider-track {
@@ -696,8 +705,13 @@ input[type="range"] {
     }
 
     .chart-box {
-        min-height: 240px;
-        height: 38vh;
+        min-height: 220px;
+        height: 240px;
+    }
+
+    .chart-canvas-wrapper {
+        min-height: 180px;
+        height: 190px;
     }
 
     /* 設定セクションのスマホ最適化 */
@@ -1679,24 +1693,62 @@ class ControlCharts {
         };
 
         this.resize();
+
+        // スマホ画面や動的レイアウト変更に対応するResizeObserver
+        if (window.ResizeObserver) {
+            this.resizeObserver = new ResizeObserver(() => {
+                this.resize();
+            });
+            if (this.timeCanvas) this.resizeObserver.observe(this.timeCanvas);
+            if (this.phaseCanvas) this.resizeObserver.observe(this.phaseCanvas);
+        }
     }
 
     resize() {
         if (this.timeCanvas) {
-            const rect = this.timeCanvas.getBoundingClientRect();
-            this.tWidth = rect.width;
-            this.tHeight = rect.height;
-            this.timeCanvas.width = this.tWidth * this.dpr;
-            this.timeCanvas.height = this.tHeight * this.dpr;
+            let rect = this.timeCanvas.getBoundingClientRect();
+            let w = rect.width;
+            let h = rect.height;
+
+            // スマホや非表示からの復帰時のゼロチェック・フォールバック
+            if (w <= 0 || h <= 0) {
+                const parent = this.timeCanvas.parentElement;
+                if (parent) {
+                    const pRect = parent.getBoundingClientRect();
+                    w = pRect.width || w;
+                    h = pRect.height || h;
+                }
+            }
+            if (w <= 0) w = 320;
+            if (h <= 0) h = 200;
+
+            this.tWidth = w;
+            this.tHeight = h;
+            this.timeCanvas.width = w * this.dpr;
+            this.timeCanvas.height = h * this.dpr;
             this.tCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
         }
 
         if (this.phaseCanvas) {
-            const rect = this.phaseCanvas.getBoundingClientRect();
-            this.pWidth = rect.width;
-            this.pHeight = rect.height;
-            this.phaseCanvas.width = this.pWidth * this.dpr;
-            this.phaseCanvas.height = this.pHeight * this.dpr;
+            let rect = this.phaseCanvas.getBoundingClientRect();
+            let w = rect.width;
+            let h = rect.height;
+
+            if (w <= 0 || h <= 0) {
+                const parent = this.phaseCanvas.parentElement;
+                if (parent) {
+                    const pRect = parent.getBoundingClientRect();
+                    w = pRect.width || w;
+                    h = pRect.height || h;
+                }
+            }
+            if (w <= 0) w = 320;
+            if (h <= 0) h = 200;
+
+            this.pWidth = w;
+            this.pHeight = h;
+            this.phaseCanvas.width = w * this.dpr;
+            this.phaseCanvas.height = h * this.dpr;
             this.pCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
         }
     }
@@ -1746,9 +1798,13 @@ class ControlCharts {
      * 時系列応答グラフ（角度＆目標角度＆トルク）
      */
     renderTimeHistory(physics) {
+        if (!this.tWidth || this.tWidth < 20 || !this.tHeight || this.tHeight < 20) {
+            this.resize();
+        }
+
         const ctx = this.tCtx;
-        const w = this.tWidth;
-        const h = this.tHeight;
+        const w = this.tWidth || 320;
+        const h = this.tHeight || 200;
 
         ctx.fillStyle = this.colors.bg;
         ctx.fillRect(0, 0, w, h);
@@ -1859,9 +1915,13 @@ class ControlCharts {
      * 相平面（Phase Plane: θ vs dθ/dt）プロット
      */
     renderPhasePlane(physics) {
+        if (!this.pWidth || this.pWidth < 20 || !this.pHeight || this.pHeight < 20) {
+            this.resize();
+        }
+
         const ctx = this.pCtx;
-        const w = this.pWidth;
-        const h = this.pHeight;
+        const w = this.pWidth || 320;
+        const h = this.pHeight || 200;
 
         ctx.fillStyle = this.colors.bg;
         ctx.fillRect(0, 0, w, h);
@@ -2299,13 +2359,35 @@ class PendulumApp {
                 const targetTab = btn.dataset.tab;
                 tabBtns.forEach(b => b.classList.toggle('active', b === btn));
 
-                document.querySelectorAll('.tab-section').forEach(sec => {
-                    sec.classList.toggle('tab-active', sec.id === `tab-${targetTab}`);
-                });
+                const targetElem = document.getElementById(`tab-${targetTab}`);
+                if (targetElem) {
+                    targetElem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
 
-                setTimeout(() => this.handleResize(), 50);
+                // 描画サイズの再確認
+                this.handleResize();
+                setTimeout(() => this.handleResize(), 100);
             });
         });
+
+        // スクロール位置に応じてタブのハイライトを自動連動
+        let scrollTimeout = null;
+        window.addEventListener('scroll', () => {
+            if (scrollTimeout) return;
+            scrollTimeout = setTimeout(() => {
+                scrollTimeout = null;
+                const sections = ['sim', 'charts', 'settings'].map(id => document.getElementById(`tab-${id}`));
+                const scrollPos = window.scrollY + 120;
+                for (let i = sections.length - 1; i >= 0; i--) {
+                    const sec = sections[i];
+                    if (sec && sec.offsetTop <= scrollPos) {
+                        const id = sec.id.replace('tab-', '');
+                        tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === id));
+                        break;
+                    }
+                }
+            }, 60);
+        }, { passive: true });
     }
 
     initShareModal() {
