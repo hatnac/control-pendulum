@@ -1,0 +1,2401 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0f172a">
+    <title>制御工学学習シミュレータ | 振子モータ制御</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+/* style.css - 制御工学学習用 振子モータ制御シミュレータ (PC & モバイル完全対応) */
+
+:root {
+    --bg-base: #090d16;
+    --bg-surface: #0f172a;
+    --bg-card: #1e293b;
+    --bg-card-hover: #273549;
+    --border: #334155;
+    --border-highlight: #475569;
+    
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+
+    --accent-blue: #38bdf8;
+    --accent-green: #10b981;
+    --accent-yellow: #eab308;
+    --accent-red: #f43f5e;
+    --accent-purple: #c084fc;
+
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+
+    --font-mono: "SF Mono", "Fira Code", "Courier New", monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    background-color: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    line-height: 1.5;
+    touch-action: manipulation;
+}
+
+/* ヘッダー */
+header {
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.logo-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.logo-badge {
+    background: linear-gradient(135deg, var(--accent-blue), #2563eb);
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 13px;
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    letter-spacing: 0.5px;
+}
+
+h1 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.btn {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    user-select: none;
+}
+
+.btn:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border-highlight);
+}
+
+.btn:active {
+    transform: translateY(1px);
+}
+
+.btn-primary {
+    background: #0284c7;
+    border-color: #38bdf8;
+}
+
+.btn-danger {
+    background: rgba(244, 63, 94, 0.2);
+    border-color: var(--accent-red);
+    color: #fecdd3;
+}
+
+/* モーダル */
+.modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    max-width: 360px;
+    width: 90%;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.btn-close {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.4rem;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.btn-close:hover {
+    color: var(--text-primary);
+}
+
+.qr-image-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 10px;
+}
+
+/* モバイル用タブナビゲーション（スマホ表示時に表示） */
+.mobile-nav-tabs {
+    display: none;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    padding: 6px 12px;
+    gap: 6px;
+    position: sticky;
+    top: 53px;
+    z-index: 90;
+}
+
+.mobile-tab-btn {
+    flex: 1;
+    padding: 8px 4px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s ease;
+}
+
+.mobile-tab-btn.active {
+    background: var(--bg-card);
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* メインレイアウト */
+.app-container {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 16px;
+    padding: 16px;
+    max-width: 1600px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+/* カード共通 */
+.card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    position: relative;
+    overflow: hidden;
+}
+
+.card-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* シミュレータエリア */
+.sim-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.canvas-wrapper {
+    position: relative;
+    width: 100%;
+    height: 480px;
+    background: #0f172a;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    touch-action: none; /* 指ドラッグ時の画面スクロールを抑止 */
+}
+
+canvas#simCanvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: grab;
+}
+
+canvas#simCanvas:active {
+    cursor: grabbing;
+}
+
+/* トルク操作コントローラー */
+.control-bar {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    user-select: none;
+}
+
+.torque-meter-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.torque-meter-label {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    min-width: 90px;
+}
+
+.torque-gauge-bar {
+    flex: 1;
+    height: 22px;
+    background: #0b0f19;
+    border-radius: var(--radius-sm);
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--border);
+}
+
+.gauge-center-line {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--text-muted);
+    z-index: 2;
+}
+
+.gauge-fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0%;
+    left: 50%;
+    transition: width 0.05s ease, left 0.05s ease;
+    z-index: 1;
+}
+
+.gauge-fill.ccw {
+    background: linear-gradient(90deg, #059669, var(--accent-green));
+}
+
+.gauge-fill.cw {
+    background: linear-gradient(270deg, #e11d48, var(--accent-red));
+}
+
+.torque-buttons {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    align-items: center;
+}
+
+.btn-motor {
+    flex: 1;
+    padding: 12px 14px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    background: #1e293b;
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.1s ease;
+    touch-action: manipulation;
+}
+
+.btn-motor:active, .btn-motor.active {
+    background: #334155;
+    transform: scale(0.98);
+}
+
+.btn-motor.left-active {
+    background: rgba(16, 185, 129, 0.35);
+    border-color: var(--accent-green);
+    color: #6ee7b7;
+}
+
+.btn-motor.right-active {
+    background: rgba(244, 63, 94, 0.35);
+    border-color: var(--accent-red);
+    color: #fda4af;
+}
+
+.control-tips {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+kbd {
+    background: #0b0f19;
+    border: 1px solid var(--border);
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+}
+
+/* グラフ・ダッシュボードエリア */
+.charts-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.chart-box {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 230px;
+}
+
+.chart-canvas-wrapper {
+    flex: 1;
+    position: relative;
+    background: #0f172a;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+
+canvas#timeCanvas, canvas#phaseCanvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/* 下部: パラメータ設定パネル */
+.settings-section {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 16px;
+}
+
+.param-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+}
+
+.param-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.param-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.param-name {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.param-value {
+    font-family: var(--font-mono);
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--accent-blue);
+}
+
+.param-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+input[type="range"] {
+    flex: 1;
+    height: 20px;
+    accent-color: var(--accent-blue);
+    cursor: pointer;
+}
+
+/* プリセットパネル */
+.preset-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.preset-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.btn-preset {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 8px;
+    border-radius: var(--radius-sm);
+    font-size: 0.78rem;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-preset:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--accent-blue);
+}
+
+.btn-preset .preset-name {
+    font-weight: 700;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.btn-preset .preset-desc {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+}
+
+/* モード切り替えスイッチ */
+.mode-toggle-group {
+    display: flex;
+    gap: 4px;
+    background: #0b0f19;
+    padding: 3px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+}
+
+.btn-mode {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-mode.active {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* ========================================================
+   📱 スマートフォン・タブレット向けレスポンシブスタイル
+   ======================================================== */
+@media (max-width: 860px) {
+    body {
+        padding-bottom: 20px;
+    }
+
+    header {
+        padding: 8px 14px;
+    }
+
+    h1 {
+        font-size: 1.0rem;
+    }
+
+    .mobile-nav-tabs {
+        display: flex;
+    }
+
+    .app-container {
+        display: block;
+        padding: 10px;
+    }
+
+    /* モバイルタブの表示・非表示切替 */
+    .tab-section {
+        display: none;
+    }
+
+    .tab-section.tab-active {
+        display: flex;
+    }
+
+    /* シミュレータ画面のスマホ最適化 */
+    .canvas-wrapper {
+        height: 52vh;
+        min-height: 280px;
+        max-height: 440px;
+    }
+
+    .btn-motor {
+        padding: 14px 10px;
+        font-size: 1.05rem;
+    }
+
+    .torque-meter-label {
+        font-size: 0.78rem;
+        min-width: 75px;
+    }
+
+    .control-tips {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+
+    /* グラフセクションのスマホ最適化 */
+    .charts-section {
+        gap: 14px;
+    }
+
+    .chart-box {
+        min-height: 240px;
+        height: 38vh;
+    }
+
+    /* 設定セクションのスマホ最適化 */
+    .settings-section {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .preset-list {
+        grid-template-columns: 1fr;
+    }
+}
+
+</style>
+</head>
+<body>
+    <!-- ヘッダー -->
+    <header>
+        <div class="logo-container">
+            <span class="logo-badge">CONTROL ENG</span>
+            <h1>振子モータ制御</h1>
+        </div>
+        <div class="header-actions">
+            <button id="btn-share-mobile" class="btn" title="スマホでアクセスするためのQRコードを表示">📱 スマホ共有</button>
+            <button id="btn-pause" class="btn">⏸ 一時停止</button>
+            <button id="btn-reset" class="btn btn-danger">↺ リセット</button>
+        </div>
+    </header>
+
+    <!-- スマホ接続用QRコードモーダル -->
+    <div id="qr-modal" class="modal-backdrop" style="display: none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>📱 スマホからアクセス</h3>
+                <button id="btn-close-modal" class="btn-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">
+                    スマートフォンのカメラで以下のQRコードを読み取ると、アプリが開きます。
+                </p>
+                <div class="qr-image-wrapper">
+                    <img id="qr-code-img" src="" alt="QR Code" style="width: 180px; height: 180px; border-radius: 8px; background: #ffffff; padding: 6px;">
+                </div>
+                <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 6px;">
+                    <span style="font-size: 0.75rem; color: var(--text-muted);">接続URL:</span>
+                    <div style="display: flex; gap: 6px;">
+                        <input id="share-url-input" type="text" readonly style="flex: 1; background: #0b0f19; border: 1px solid var(--border); color: var(--text-primary); padding: 6px 10px; border-radius: 4px; font-family: var(--font-mono); font-size: 0.8rem;">
+                        <button id="btn-copy-url" class="btn">コピー</button>
+                    </div>
+                </div>
+                <div style="margin-top: 14px; padding: 8px 10px; background: #0b0f19; border-radius: 6px; font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;">
+                    ※ 同じWi-Fi（家庭内や大学・研究室）に接続しているスマホからアクセス可能です。<br>
+                    ※ GitHub Pages等にアップロードすると、世界中どこからでもアクセスできるようになります。
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- モバイル用ナビゲーションタブ（スマホ画面で表示） -->
+    <nav class="mobile-nav-tabs">
+        <button class="mobile-tab-btn active" data-tab="sim">🎮 振子操作</button>
+        <button class="mobile-tab-btn" data-tab="charts">📈 応答グラフ</button>
+        <button class="mobile-tab-btn" data-tab="settings">⚙️ 設定</button>
+    </nav>
+
+    <!-- メインコンテンツ -->
+    <main class="app-container">
+        <!-- セクション 1: 振子シミュレータ本体 -->
+        <section id="tab-sim" class="card sim-section tab-section tab-active">
+            <div class="card-title">
+                <span>振子シミュレーション (360°回転)</span>
+                <span style="font-size: 0.75rem; color: var(--accent-yellow);">☝️ 指・マウスで掴んで動かせます</span>
+            </div>
+
+            <!-- Canvas -->
+            <div class="canvas-wrapper">
+                <canvas id="simCanvas"></canvas>
+            </div>
+
+            <!-- トルク操作パネル -->
+            <div class="control-bar">
+                <div class="torque-meter-container">
+                    <span class="torque-meter-label">モータ出力:</span>
+                    <div class="torque-gauge-bar">
+                        <div class="gauge-center-line"></div>
+                        <div id="gauge-fill" class="gauge-fill"></div>
+                    </div>
+                    <span id="torque-val-text" class="torque-meter-label" style="text-align: right; min-width: 125px;">0.00 Nm (0%)</span>
+                </div>
+
+                <div class="torque-buttons">
+                    <button id="btn-left" class="btn-motor">◀ 左回転 (← / A)</button>
+                    <button id="btn-zero" class="btn" style="padding: 12px 14px;" title="トルクを0にする">切断 (Space)</button>
+                    <button id="btn-right" class="btn-motor">右回転 (→ / D) ▶</button>
+                </div>
+
+                <div class="control-tips">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span>操作モード:</span>
+                        <div class="mode-toggle-group">
+                            <button id="mode-momentary" class="btn-mode active">押しっぱなし</button>
+                            <button id="mode-throttle" class="btn-mode">スロットル</button>
+                        </div>
+                    </div>
+                    <div>
+                        <kbd>←</kbd> <kbd>→</kbd> トルク操作 / <kbd>Space</kbd> ニュートラル / <kbd>R</kbd> リセット
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- セクション 2: 制御工学ダッシュボード（時系列グラフ ＆ 相平面） -->
+        <section id="tab-charts" class="card charts-section tab-section">
+            <div class="chart-box">
+                <div class="card-title">
+                    <span>時系列応答 (Time History)</span>
+                    <span style="font-size: 0.72rem; color: var(--text-muted);">θ・θ_ref・τ</span>
+                </div>
+                <div class="chart-canvas-wrapper">
+                    <canvas id="timeCanvas"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-box">
+                <div class="card-title">
+                    <span>相平面プロット (Phase Plane: θ vs ω)</span>
+                    <span style="font-size: 0.72rem; color: var(--text-muted);">平衡点と状態軌跡</span>
+                </div>
+                <div class="chart-canvas-wrapper">
+                    <canvas id="phaseCanvas"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- セクション 3: パラメータ設定 & プリセット & 解説 -->
+        <section id="tab-settings" class="settings-section tab-section">
+            <!-- パラメータ変更スライダー -->
+            <div class="card">
+                <div class="card-title">
+                    <span>物理・制御パラメータ調整</span>
+                    <span style="font-size: 0.72rem; color: var(--text-muted);">リアルタイム反映</span>
+                </div>
+                <div class="param-grid">
+                    <!-- 長さ l -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">棒の長さ (l)</span>
+                            <span id="val-l" class="param-value">1.00 m</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-l" type="range" min="0.3" max="2.5" step="0.05" value="1.0">
+                        </div>
+                    </div>
+
+                    <!-- 質量 m -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">おもりの質量 (m)</span>
+                            <span id="val-m" class="param-value">1.00 kg</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-m" type="range" min="0.1" max="5.0" step="0.1" value="1.0">
+                        </div>
+                    </div>
+
+                    <!-- 最大トルク tauMax -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">最大トルク (τ_max)</span>
+                            <span id="val-tauMax" class="param-value">8.0 Nm</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-tauMax" type="range" min="1.0" max="25.0" step="0.5" value="8.0">
+                        </div>
+                    </div>
+
+                    <!-- 目標角度 targetDeg -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">目標角度 (θ_ref)</span>
+                            <span id="val-targetDeg" class="param-value">180°</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-targetDeg" type="range" min="-180" max="180" step="5" value="180">
+                        </div>
+                    </div>
+
+                    <!-- 粘性減衰 c -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">粘性減衰 (c)</span>
+                            <span id="val-c" class="param-value">0.15 Ns/m</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-c" type="range" min="0.0" max="1.5" step="0.02" value="0.15">
+                        </div>
+                    </div>
+
+                    <!-- 重力加速度 g -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">重力加速度 (g)</span>
+                            <span id="val-g" class="param-value">9.8 m/s²</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-g" type="range" min="0.0" max="20.0" step="0.2" value="9.8">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- プリセット & 制御工学ヒント -->
+            <div class="card preset-panel">
+                <div class="card-title">
+                    <span>学習プリセット</span>
+                </div>
+                <div class="preset-list">
+                    <button class="btn-preset" data-preset="default">
+                        <span class="preset-name">1. 標準設定 (倒立180°)</span>
+                        <span class="preset-desc">倒立振子を手動で静止させる基本</span>
+                    </button>
+                    <button class="btn-preset" data-preset="pendulum90">
+                        <span class="preset-name">2. 水平保持 (90°)</span>
+                        <span class="preset-desc">重力トルクと釣り合うトルクの保持</span>
+                    </button>
+                    <button class="btn-preset" data-preset="lowTorque">
+                        <span class="preset-name">3. スイングアップ必須</span>
+                        <span class="preset-desc">τ_max &lt; mgl。助走をつけて振り上げる</span>
+                    </button>
+                    <button class="btn-preset" data-preset="fastShort">
+                        <span class="preset-name">4. 短尺・俊敏振子</span>
+                        <span class="preset-desc">固有周期が短く高応答が必要</span>
+                    </button>
+                    <button class="btn-preset" data-preset="heavyLong">
+                        <span class="preset-name">5. 長尺・高慣性</span>
+                        <span class="preset-desc">慣性モーメント大。急停止困難</span>
+                    </button>
+                    <button class="btn-preset" data-preset="zeroG">
+                        <span class="preset-name">6. 無重力 (宇宙)</span>
+                        <span class="preset-desc">純粋な回転慣性系の制御</span>
+                    </button>
+                </div>
+
+                <div style="margin-top: 8px; padding: 10px; background: #0b0f19; border-radius: var(--radius-sm); border: 1px solid var(--border); font-size: 0.76rem; color: var(--text-secondary); line-height: 1.4;">
+                    <strong style="color: var(--accent-yellow);">💡 制御工学の着眼点:</strong><br>
+                    • 倒立振子(180°)は不安定平衡点のため、手動でピタッと止めるのは非常に困難です。<br>
+                    • 「スイングアップ必須」モードでは、最大トルクが重力最大トルク $mgl$ 未満のため、共振（エネルギー励起）を利用した制御の必要性を体感できます。
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- メインスクリプト -->
+    <script>
+/**
+ * physics.js - 振子とモータの物理モデルおよび数値計算（RK4）
+ * 
+ * 運動方程式:
+ *   J * d2θ/dt2 + c * dθ/dt + m * g * l * sin(θ) = τ
+ * ここで、棒の質量を無視した場合の慣性モーメント J = m * l^2
+ *   d2θ/dt2 = (τ - c * dθ/dt - m * g * l * sin(θ)) / (m * l^2)
+ *
+ * 角度規約:
+ *   θ = 0 rad (0°)     : 鉛直下向き（自然な安定釣り合い点）
+ *   θ = π rad (180°)   : 鉛直上向き（倒立状態、不安定釣り合い点）
+ *   反時計回り (CCW)   : 正方向 (+)
+ *   時計回り (CW)     : 負方向 (-)
+ */
+
+class PendulumPhysics {
+    constructor() {
+        // 物理パラメータ初期値
+        this.l = 1.0;            // 棒の長さ [m]
+        this.m = 1.0;            // 先端質量 [kg]
+        this.g = 9.80665;        // 重力加速度 [m/s^2]
+        this.c = 0.15;           // 粘性減衰係数 [N*m*s/rad]
+        this.tauMax = 6.0;       // モーター最大トルク [N*m]
+        this.targetAngleDeg = 180; // 目標角度 [deg] (初期値: 倒立振子)
+
+        // 状態変数
+        this.theta = 0.0;        // 振子角度 [rad] (多回転対応、連続値)
+        this.omega = 0.0;        // 角速度 [rad/s]
+        this.alpha = 0.0;        // 角加速度 [rad/s^2]
+        this.tau = 0.0;          // 現在の印加トルク [N*m]
+
+        // シミュレーション時刻
+        this.time = 0.0;
+    }
+
+    /**
+     * 慣性モーメント J = m * l^2 [kg*m^2]
+     */
+    get J() {
+        return Math.max(0.001, this.m * this.l * this.l);
+    }
+
+    /**
+     * 重力による最大トルク m * g * l [N*m]
+     * (トルクがこれ未満だと最下点から一発で倒立に持ち上げられず、スイングアップが必要になる)
+     */
+    get gravityTorqueMax() {
+        return this.m * this.g * this.l;
+    }
+
+    /**
+     * 現在の角加速度を計算（状態微分関数）
+     * @param {number} theta 角度 [rad]
+     * @param {number} omega 角速度 [rad/s]
+     * @param {number} tau 印加トルク [N*m]
+     * @returns {number} 角加速度 alpha [rad/s^2]
+     */
+    computeAlpha(theta, omega, tau) {
+        // トルクのサチュレーション（モーター最大トルク制限）
+        const clampedTau = Math.max(-this.tauMax, Math.min(this.tauMax, tau));
+        
+        // 運動方程式: d2θ/dt2 = (τ - c*ω - m*g*l*sin(θ)) / J
+        const torqueGravity = -this.m * this.g * this.l * Math.sin(theta);
+        const torqueDamping = -this.c * omega;
+        const totalTorque = clampedTau + torqueDamping + torqueGravity;
+
+        return totalTorque / this.J;
+    }
+
+    /**
+     * 4次ルンゲ＝クッタ法（Runge-Kutta 4th Order）による数値積分
+     * @param {number} dt 時間刻み [s]
+     * @param {number} appliedTau 操作入力トルク [N*m]
+     */
+    stepRK4(dt, appliedTau) {
+        // トルクを記録
+        this.tau = Math.max(-this.tauMax, Math.min(this.tauMax, appliedTau));
+
+        const th0 = this.theta;
+        const om0 = this.omega;
+        const tau = this.tau;
+
+        // k1
+        const k1_th = om0;
+        const k1_om = this.computeAlpha(th0, om0, tau);
+
+        // k2
+        const th_k2 = th0 + 0.5 * dt * k1_th;
+        const om_k2 = om0 + 0.5 * dt * k1_om;
+        const k2_th = om_k2;
+        const k2_om = this.computeAlpha(th_k2, om_k2, tau);
+
+        // k3
+        const th_k3 = th0 + 0.5 * dt * k2_th;
+        const om_k3 = om0 + 0.5 * dt * k2_om;
+        const k3_th = om_k3;
+        const k3_om = this.computeAlpha(th_k3, om_k3, tau);
+
+        // k4
+        const th_k4 = th0 + dt * k3_th;
+        const om_k4 = om0 + dt * k3_om;
+        const k4_th = om_k4;
+        const k4_om = this.computeAlpha(th_k4, om_k4, tau);
+
+        // 状態更新
+        this.theta += (dt / 6.0) * (k1_th + 2.0 * k2_th + 2.0 * k3_th + k4_th);
+        this.omega += (dt / 6.0) * (k1_om + 2.0 * k2_om + 2.0 * k3_om + k4_om);
+        this.alpha = this.computeAlpha(this.theta, this.omega, this.tau);
+        this.time += dt;
+    }
+
+    /**
+     * サブステップによる安定した時間発展
+     * @param {number} totalDt 進める合計時間 [s]
+     * @param {number} appliedTau 操作トルク [N*m]
+     */
+    update(totalDt, appliedTau) {
+        // 刻み幅を小さく分割して積分精度を保つ（sub-stepping）
+        const subDt = 0.002; // 2ms刻み
+        let remaining = totalDt;
+        while (remaining > 0) {
+            const dt = Math.min(remaining, subDt);
+            this.stepRK4(dt, appliedTau);
+            remaining -= dt;
+        }
+    }
+
+    /**
+     * 状態のリセット
+     * @param {number} initialThetaDeg 初期角度 [deg]
+     * @param {number} initialOmega 初期角速度 [rad/s]
+     */
+    reset(initialThetaDeg = 0, initialOmega = 0) {
+        this.theta = (initialThetaDeg * Math.PI) / 180.0;
+        this.omega = initialOmega;
+        this.alpha = 0.0;
+        this.tau = 0.0;
+        this.time = 0.0;
+    }
+
+    /**
+     * 角度を [-π, π] または [-180°, 180°] の範囲に正規化
+     * @param {number} angleRad 角度 [rad]
+     * @returns {number} 正規化された角度 [-π, π]
+     */
+    static normalizeAngle(angleRad) {
+        let a = angleRad % (2 * Math.PI);
+        if (a > Math.PI) a -= 2 * Math.PI;
+        if (a <= -Math.PI) a += 2 * Math.PI;
+        return a;
+    }
+
+    /**
+     * 目標角度 [rad]
+     */
+    get targetAngleRad() {
+        return (this.targetAngleDeg * Math.PI) / 180.0;
+    }
+
+    /**
+     * 目標角度との最短角度偏差 e = θ - θ_target [-π, π]
+     */
+    get angleError() {
+        return PendulumPhysics.normalizeAngle(this.theta - this.targetAngleRad);
+    }
+
+    /**
+     * 目標角度との最短角度偏差 [deg]
+     */
+    get angleErrorDeg() {
+        return (this.angleError * 180.0) / Math.PI;
+    }
+
+    /**
+     * 正規化された現在角度 [-180°, 180°]
+     */
+    get normalizedThetaDeg() {
+        return (PendulumPhysics.normalizeAngle(this.theta) * 180.0) / Math.PI;
+    }
+
+    /**
+     * 0°〜360°表記の現在角度
+     */
+    get theta360Deg() {
+        let deg = (this.theta * 180.0) / Math.PI % 360.0;
+        if (deg < 0) deg += 360.0;
+        return deg;
+    }
+
+    /**
+     * 運動エネルギー T = 1/2 * J * ω^2 [J]
+     */
+    get kineticEnergy() {
+        return 0.5 * this.J * this.omega * this.omega;
+    }
+
+    /**
+     * 位置エネルギー V = m * g * l * (1 - cos(θ)) [J] (最下点を 0 J とする)
+     */
+    get potentialEnergy() {
+        return this.m * this.g * this.l * (1.0 - Math.cos(this.theta));
+    }
+
+    /**
+     * 総力学的エネルギー E = T + V [J]
+     */
+    get totalEnergy() {
+        return this.kineticEnergy + this.potentialEnergy;
+    }
+
+    /**
+     * 目標姿勢での位置エネルギー [J]
+     */
+    get targetEnergy() {
+        return this.m * this.g * this.l * (1.0 - Math.cos(this.targetAngleRad));
+    }
+}
+
+/**
+ * renderer.js - 振子シミュレーションのCanvas描画（レスポンシブ＆タッチ対応）
+ */
+
+
+
+class PendulumRenderer {
+    /**
+     * @param {HTMLCanvasElement} canvas 
+     */
+    constructor(canvas) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+
+        // ピクセル比対応
+        this.dpr = window.devicePixelRatio || 1;
+        this.resize();
+
+        // 描画スタイル設定
+        this.colors = {
+            bg: '#0f172a',
+            grid: '#1e293b',
+            axis: '#334155',
+            rod: '#94a3b8',
+            bob: '#38bdf8',
+            bobGlow: 'rgba(56, 189, 248, 0.4)',
+            pivot: '#f8fafc',
+            pivotRim: '#475569',
+            targetGhost: 'rgba(234, 179, 8, 0.4)',
+            targetGhostBob: 'rgba(234, 179, 8, 0.25)',
+            targetHighlight: '#eab308',
+            torqueCcw: '#10b981',       // 正トルク（緑・反時計回り）
+            torqueCw: '#f43f5e',        // 負トルク（赤・時計回り）
+            trail: 'rgba(56, 189, 248, 0.15)',
+            textMain: '#f1f5f9',
+            textMuted: '#64748b',
+            dragGlow: 'rgba(234, 179, 8, 0.6)'
+        };
+
+        // おもりの軌跡履歴
+        this.trail = [];
+        this.maxTrailLength = 35;
+    }
+
+    /**
+     * Canvas解像度のリサイズ調整
+     */
+    resize() {
+        const rect = this.canvas.getBoundingClientRect();
+        this.width = rect.width || 300;
+        this.height = rect.height || 300;
+        this.canvas.width = this.width * this.dpr;
+        this.canvas.height = this.height * this.dpr;
+        this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    }
+
+    /**
+     * 支点の中心座標と振子の表示長さを計算
+     */
+    getLayoutMetrics(physics) {
+        const w = this.width;
+        const h = this.height;
+        const pivotX = w * 0.5;
+        const pivotY = h * 0.5;
+
+        // 縦横の小さい方に合わせてスケーリング
+        const visualScale = Math.min(w, h) * 0.36;
+        const visualLength = Math.max(35, physics.l * visualScale);
+        const bobRadius = Math.max(14, Math.min(32, 14 * Math.cbrt(physics.m)));
+
+        return { pivotX, pivotY, visualLength, bobRadius };
+    }
+
+    /**
+     * おもりの現在の画面座標とタッチ当たり判定用半径を取得
+     */
+    getBobPosition(physics) {
+        const { pivotX, pivotY, visualLength, bobRadius } = this.getLayoutMetrics(physics);
+        const bx = pivotX + visualLength * Math.sin(physics.theta);
+        const by = pivotY + visualLength * Math.cos(physics.theta);
+        return { x: bx, y: by, radius: bobRadius, pivotX, pivotY, visualLength };
+    }
+
+    /**
+     * 画面全体の描画
+     * @param {PendulumPhysics} physics 
+     * @param {Object} stateStatus 
+     */
+    draw(physics, stateStatus = {}) {
+        const ctx = this.ctx;
+        const w = this.width;
+        const h = this.height;
+
+        // 背景クリア
+        ctx.fillStyle = this.colors.bg;
+        ctx.fillRect(0, 0, w, h);
+
+        const { pivotX, pivotY, visualLength, bobRadius } = this.getLayoutMetrics(physics);
+
+        // 背景の分度器ガイド（円形目盛り）
+        this.drawAngleDial(pivotX, pivotY, visualLength);
+
+        // 目標角度のゴースト振子
+        this.drawTargetGhost(pivotX, pivotY, visualLength, physics);
+
+        // おもりの軌跡を描画
+        this.drawTrail();
+
+        // 振子本体（ロッドとおもり）
+        this.drawPendulum(pivotX, pivotY, visualLength, bobRadius, physics, stateStatus.isDragging);
+
+        // 支点モーター＆トルクインジケータ
+        this.drawMotorPivot(pivotX, pivotY, physics);
+
+        // HUD / ステータス表示
+        this.drawHUD(physics, stateStatus);
+    }
+
+    /**
+     * 背景の角度目盛り盤を描画
+     */
+    drawAngleDial(cx, cy, radius) {
+        const ctx = this.ctx;
+        ctx.save();
+
+        // 外周円
+        ctx.strokeStyle = this.colors.grid;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // 目盛り線
+        const isSmallScreen = this.width < 450;
+        const step = isSmallScreen ? 90 : 30;
+
+        for (let deg = 0; deg < 360; deg += step) {
+            const rad = (deg * Math.PI) / 180;
+            const sx = cx + Math.sin(rad) * (radius - 5);
+            const sy = cy + Math.cos(rad) * (radius - 5);
+            const ex = cx + Math.sin(rad) * (radius + 5);
+            const ey = cy + Math.cos(rad) * (radius + 5);
+
+            ctx.strokeStyle = (deg % 90 === 0) ? this.colors.axis : this.colors.grid;
+            ctx.lineWidth = (deg % 90 === 0) ? 2 : 1;
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(ex, ey);
+            ctx.stroke();
+
+            // 0°, 90°, 180°, 270° のラベル
+            if (deg % 90 === 0) {
+                const tx = cx + Math.sin(rad) * (radius + (isSmallScreen ? 14 : 18));
+                const ty = cy + Math.cos(rad) * (radius + (isSmallScreen ? 14 : 18));
+                ctx.fillStyle = this.colors.textMuted;
+                ctx.font = isSmallScreen ? '10px sans-serif' : '11px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                let label = `${deg}°`;
+                if (!isSmallScreen) {
+                    if (deg === 0) label = '0° (安定)';
+                    else if (deg === 180) label = '180° (倒立)';
+                }
+                ctx.fillText(label, tx, ty);
+            }
+        }
+
+        ctx.restore();
+    }
+
+    /**
+     * 目標角度の半透明ゴースト振子を描画
+     */
+    drawTargetGhost(cx, cy, length, physics) {
+        const ctx = this.ctx;
+        const targetRad = physics.targetAngleRad;
+
+        const gx = cx + length * Math.sin(targetRad);
+        const gy = cy + length * Math.cos(targetRad);
+
+        ctx.save();
+        ctx.strokeStyle = this.colors.targetGhost;
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(gx, gy);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        const bobRadius = Math.max(12, Math.min(30, 13 * Math.cbrt(physics.m)));
+        ctx.fillStyle = this.colors.targetGhostBob;
+        ctx.strokeStyle = this.colors.targetHighlight;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(gx, gy, bobRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = this.colors.targetHighlight;
+        ctx.beginPath();
+        ctx.arc(gx, gy, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    /**
+     * おもりの移動軌跡を描画
+     */
+    drawTrail() {
+        if (this.trail.length < 2) return;
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(this.trail[0].x, this.trail[0].y);
+        for (let i = 1; i < this.trail.length; i++) {
+            ctx.lineTo(this.trail[i].x, this.trail[i].y);
+        }
+        ctx.strokeStyle = this.colors.trail;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    /**
+     * 振子本体を描画
+     */
+    drawPendulum(cx, cy, length, bobRadius, physics, isDragging = false) {
+        const ctx = this.ctx;
+        const th = physics.theta;
+
+        const bx = cx + length * Math.sin(th);
+        const by = cy + length * Math.cos(th);
+
+        if (!isDragging) {
+            this.trail.push({ x: bx, y: by });
+            if (this.trail.length > this.maxTrailLength) {
+                this.trail.shift();
+            }
+        }
+
+        ctx.save();
+
+        // ロッド
+        const rodGrad = ctx.createLinearGradient(cx, cy, bx, by);
+        rodGrad.addColorStop(0, '#64748b');
+        rodGrad.addColorStop(1, '#cbd5e1');
+
+        ctx.strokeStyle = rodGrad;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(bx, by);
+        ctx.stroke();
+
+        // ドラッグ中のタッチハイライト
+        if (isDragging) {
+            ctx.strokeStyle = '#eab308';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(bx, by, bobRadius + 8, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        // おもりのグローエフェクト
+        ctx.shadowColor = isDragging ? this.colors.dragGlow : this.colors.bobGlow;
+        ctx.shadowBlur = isDragging ? 22 : 14;
+
+        const bobGrad = ctx.createRadialGradient(
+            bx - bobRadius * 0.3, by - bobRadius * 0.3, bobRadius * 0.1,
+            bx, by, bobRadius
+        );
+        bobGrad.addColorStop(0, isDragging ? '#fef08a' : '#7dd3fc');
+        bobGrad.addColorStop(0.7, isDragging ? '#eab308' : '#0284c7');
+        bobGrad.addColorStop(1, isDragging ? '#ca8a04' : '#0369a1');
+
+        ctx.fillStyle = bobGrad;
+        ctx.beginPath();
+        ctx.arc(bx, by, bobRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = isDragging ? '#fef08a' : '#bae6fd';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // 質量ラベル
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 11px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${physics.m.toFixed(1)}kg`, bx, by);
+
+        ctx.restore();
+    }
+
+    /**
+     * 支点モーター＆トルク表示
+     */
+    drawMotorPivot(cx, cy, physics) {
+        const ctx = this.ctx;
+        ctx.save();
+
+        const pivotRadius = 16;
+        const tau = physics.tau;
+        const tauRatio = tau / physics.tauMax;
+
+        if (Math.abs(tauRatio) > 0.01) {
+            const isCCW = tau > 0;
+            const arcRadius = pivotRadius + 12;
+            const startAngle = Math.PI * 0.5;
+            const angleSpan = Math.abs(tauRatio) * Math.PI * 1.5;
+            const endAngle = isCCW ? (startAngle - angleSpan) : (startAngle + angleSpan);
+
+            ctx.lineWidth = 5;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = isCCW ? this.colors.torqueCcw : this.colors.torqueCw;
+            ctx.shadowColor = ctx.strokeStyle;
+            ctx.shadowBlur = 8;
+
+            ctx.beginPath();
+            ctx.arc(cx, cy, arcRadius, startAngle, endAngle, isCCW);
+            ctx.stroke();
+
+            const arrowX = cx + arcRadius * Math.cos(endAngle);
+            const arrowY = cy + arcRadius * Math.sin(endAngle);
+            const tangent = endAngle + (isCCW ? -Math.PI / 2 : Math.PI / 2);
+            const arrowSize = 7;
+
+            ctx.fillStyle = ctx.strokeStyle;
+            ctx.beginPath();
+            ctx.moveTo(arrowX, arrowY);
+            ctx.lineTo(
+                arrowX - arrowSize * Math.cos(tangent - Math.PI / 6),
+                arrowY - arrowSize * Math.sin(tangent - Math.PI / 6)
+            );
+            ctx.lineTo(
+                arrowX - arrowSize * Math.cos(tangent + Math.PI / 6),
+                arrowY - arrowSize * Math.sin(tangent + Math.PI / 6)
+            );
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        ctx.shadowBlur = 0;
+
+        ctx.fillStyle = '#1e293b';
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(cx, cy, pivotRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath();
+        ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    /**
+     * HUD (現在状態のオーバーレイ表示)
+     */
+    drawHUD(physics, stateStatus) {
+        const ctx = this.ctx;
+        ctx.save();
+
+        const isSmallScreen = this.width < 450;
+        const pad = isSmallScreen ? 10 : 16;
+        const hudW = isSmallScreen ? 150 : 190;
+        const hudH = isSmallScreen ? 85 : 105;
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(pad, pad, hudW, hudH, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.font = isSmallScreen ? '11px "Courier New", monospace' : '12px "Courier New", monospace';
+        ctx.fillStyle = this.colors.textMain;
+
+        const degNorm = physics.normalizedThetaDeg.toFixed(1);
+        const omegaVal = physics.omega.toFixed(2);
+        const tauVal = physics.tau.toFixed(2);
+        const errDeg = Math.abs(physics.angleErrorDeg).toFixed(1);
+
+        const lineStep = isSmallScreen ? 16 : 19;
+        let y = pad + (isSmallScreen ? 16 : 20);
+
+        ctx.fillText(`θ  : ${degNorm}°`, pad + 8, y);
+        y += lineStep;
+        ctx.fillText(`ω  : ${omegaVal} rad/s`, pad + 8, y);
+        y += lineStep;
+        ctx.fillText(`τ  : ${tauVal} Nm`, pad + 8, y);
+        y += lineStep;
+        ctx.fillText(`偏差: ${errDeg}°`, pad + 8, y);
+        if (!isSmallScreen) {
+            y += lineStep;
+            ctx.fillText(`全E : ${physics.totalEnergy.toFixed(2)} J`, pad + 8, y);
+        }
+
+        // 整定判定ステータス
+        if (stateStatus.stabilized) {
+            ctx.fillStyle = 'rgba(16, 185, 129, 0.92)';
+            const badgeW = isSmallScreen ? 160 : 200;
+            const badgeH = isSmallScreen ? 34 : 40;
+            ctx.beginPath();
+            ctx.roundRect(this.width / 2 - badgeW / 2, isSmallScreen ? 12 : 20, badgeW, badgeH, 18);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = isSmallScreen ? 'bold 15px sans-serif' : 'bold 17px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('★ STABILIZED! ★', this.width / 2, (isSmallScreen ? 12 : 20) + badgeH / 2);
+        } else if (stateStatus.holdingProgress > 0) {
+            const barW = isSmallScreen ? 140 : 180;
+            const barH = 12;
+            const barX = this.width / 2 - barW / 2;
+            const barY = isSmallScreen ? 20 : 24;
+
+            ctx.fillStyle = 'rgba(30, 41, 59, 0.8)';
+            ctx.beginPath();
+            ctx.roundRect(barX, barY, barW, barH, 6);
+            ctx.fill();
+
+            const fillW = Math.max(0, Math.min(barW, barW * stateStatus.holdingProgress));
+            ctx.fillStyle = '#eab308';
+            ctx.beginPath();
+            ctx.roundRect(barX, barY, fillW, barH, 6);
+            ctx.fill();
+
+            ctx.fillStyle = '#f8fafc';
+            ctx.font = 'bold 10px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(`安定化維持中... ${(stateStatus.holdingTime).toFixed(1)}s`, this.width / 2, barY - 3);
+        }
+
+        ctx.restore();
+    }
+}
+
+/**
+ * charts.js - 制御工学学習用グラフ（時系列応答＆相平面）
+ */
+
+
+
+class ControlCharts {
+    /**
+     * @param {HTMLCanvasElement} timeCanvas 
+     * @param {HTMLCanvasElement} phaseCanvas 
+     */
+    constructor(timeCanvas, phaseCanvas) {
+        this.timeCanvas = timeCanvas;
+        this.phaseCanvas = phaseCanvas;
+
+        this.tCtx = timeCanvas.getContext('2d');
+        this.pCtx = phaseCanvas.getContext('2d');
+
+        this.dpr = window.devicePixelRatio || 1;
+
+        // データ履歴バッファ
+        this.maxHistory = 400; // 約6〜8秒分のデータ
+        this.history = [];     // { t, thetaDeg, targetDeg, omega, tau }
+
+        // 相平面の軌跡履歴
+        this.maxPhaseHistory = 300;
+        this.phaseHistory = []; // { thetaDeg, omega }
+
+        this.colors = {
+            bg: '#0f172a',
+            grid: '#1e293b',
+            axis: '#334155',
+            text: '#94a3b8',
+            theta: '#38bdf8',      // 現在角度（シアン）
+            target: '#eab308',     // 目標角度（イエロー破線）
+            torque: '#10b981',     // トルク（エメラルド）
+            omega: '#c084fc',      // 角速度（パープル）
+            phaseDot: '#38bdf8',
+            phaseLine: 'rgba(56, 189, 248, 0.4)'
+        };
+
+        this.resize();
+    }
+
+    resize() {
+        if (this.timeCanvas) {
+            const rect = this.timeCanvas.getBoundingClientRect();
+            this.tWidth = rect.width;
+            this.tHeight = rect.height;
+            this.timeCanvas.width = this.tWidth * this.dpr;
+            this.timeCanvas.height = this.tHeight * this.dpr;
+            this.tCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+        }
+
+        if (this.phaseCanvas) {
+            const rect = this.phaseCanvas.getBoundingClientRect();
+            this.pWidth = rect.width;
+            this.pHeight = rect.height;
+            this.phaseCanvas.width = this.pWidth * this.dpr;
+            this.phaseCanvas.height = this.pHeight * this.dpr;
+            this.pCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+        }
+    }
+
+    /**
+     * 新しいサンプル点を記録
+     * @param {PendulumPhysics} physics 
+     */
+    addSample(physics) {
+        const item = {
+            t: physics.time,
+            thetaDeg: physics.normalizedThetaDeg,
+            targetDeg: physics.targetAngleDeg,
+            omega: physics.omega,
+            tau: physics.tau
+        };
+
+        this.history.push(item);
+        if (this.history.length > this.maxHistory) {
+            this.history.shift();
+        }
+
+        this.phaseHistory.push({
+            thetaDeg: physics.normalizedThetaDeg,
+            omega: physics.omega
+        });
+        if (this.phaseHistory.length > this.maxPhaseHistory) {
+            this.phaseHistory.shift();
+        }
+    }
+
+    clear() {
+        this.history = [];
+        this.phaseHistory = [];
+    }
+
+    /**
+     * 両グラフを更新描画
+     * @param {PendulumPhysics} physics 
+     */
+    render(physics) {
+        this.renderTimeHistory(physics);
+        this.renderPhasePlane(physics);
+    }
+
+    /**
+     * 時系列応答グラフ（角度＆目標角度＆トルク）
+     */
+    renderTimeHistory(physics) {
+        const ctx = this.tCtx;
+        const w = this.tWidth;
+        const h = this.tHeight;
+
+        ctx.fillStyle = this.colors.bg;
+        ctx.fillRect(0, 0, w, h);
+
+        const padLeft = 40;
+        const padRight = 15;
+        const padTop = 20;
+        const padBottom = 25;
+        const plotW = w - padLeft - padRight;
+        const plotH = h - padTop - padBottom;
+
+        // グリッド（-180°, -90°, 0°, 90°, 180°）
+        ctx.strokeStyle = this.colors.grid;
+        ctx.lineWidth = 1;
+        ctx.fillStyle = this.colors.text;
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+
+        const degTicks = [-180, -90, 0, 90, 180];
+        degTicks.forEach(deg => {
+            const y = padTop + plotH * (1.0 - (deg + 180) / 360);
+            ctx.beginPath();
+            ctx.moveTo(padLeft, y);
+            ctx.lineTo(w - padRight, y);
+            ctx.stroke();
+            ctx.fillText(`${deg}°`, padLeft - 6, y);
+        });
+
+        // ゼロ軸の強調
+        const zeroY = padTop + plotH * 0.5;
+        ctx.strokeStyle = this.colors.axis;
+        ctx.beginPath();
+        ctx.moveTo(padLeft, zeroY);
+        ctx.lineTo(w - padRight, zeroY);
+        ctx.stroke();
+
+        // 凡例
+        ctx.textAlign = 'left';
+        ctx.fillStyle = this.colors.theta;
+        ctx.fillText('― 角度 θ', padLeft + 10, padTop - 8);
+        ctx.fillStyle = this.colors.target;
+        ctx.fillText('--- 目標 θ_ref', padLeft + 75, padTop - 8);
+        ctx.fillStyle = this.colors.torque;
+        ctx.fillText('― トルク τ', padLeft + 160, padTop - 8);
+
+        if (this.history.length < 2) return;
+
+        // 目標値の破線プロット
+        ctx.save();
+        ctx.strokeStyle = this.colors.target;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        for (let i = 0; i < this.history.length; i++) {
+            const p = this.history[i];
+            const x = padLeft + (i / (this.maxHistory - 1)) * plotW;
+            const y = padTop + plotH * (1.0 - (p.targetDeg + 180) / 360);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.restore();
+
+        // トルクプロット（スケール: ±tauMax を画面下半分にフィット）
+        ctx.save();
+        ctx.strokeStyle = this.colors.torque;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        for (let i = 0; i < this.history.length; i++) {
+            const p = this.history[i];
+            const x = padLeft + (i / (this.maxHistory - 1)) * plotW;
+            // トルクは zeroY を中心に ±plotH*0.4 の範囲で描画
+            const tNorm = p.tau / Math.max(0.1, physics.tauMax);
+            const y = zeroY - tNorm * (plotH * 0.35);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.restore();
+
+        // 角度 θ プロット
+        ctx.save();
+        ctx.strokeStyle = this.colors.theta;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        let prevNorm = null;
+        for (let i = 0; i < this.history.length; i++) {
+            const p = this.history[i];
+            const x = padLeft + (i / (this.maxHistory - 1)) * plotW;
+            const y = padTop + plotH * (1.0 - (p.thetaDeg + 180) / 360);
+
+            // 180°と-180°の境界ジャンプ時は線を途切らせる
+            if (prevNorm !== null && Math.abs(p.thetaDeg - prevNorm) > 180) {
+                ctx.moveTo(x, y);
+            } else if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+            prevNorm = p.thetaDeg;
+        }
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    /**
+     * 相平面（Phase Plane: θ vs dθ/dt）プロット
+     */
+    renderPhasePlane(physics) {
+        const ctx = this.pCtx;
+        const w = this.pWidth;
+        const h = this.pHeight;
+
+        ctx.fillStyle = this.colors.bg;
+        ctx.fillRect(0, 0, w, h);
+
+        const cx = w * 0.5;
+        const cy = h * 0.5;
+        const plotRadiusX = w * 0.42;
+        const plotRadiusY = h * 0.40;
+
+        // グリッドと軸
+        ctx.strokeStyle = this.colors.grid;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        // 縦横の十字軸
+        ctx.moveTo(cx - plotRadiusX, cy); ctx.lineTo(cx + plotRadiusX, cy);
+        ctx.moveTo(cx, cy - plotRadiusY); ctx.lineTo(cx, cy + plotRadiusY);
+        ctx.stroke();
+
+        ctx.strokeStyle = this.colors.axis;
+        ctx.strokeRect(cx - plotRadiusX, cy - plotRadiusY, plotRadiusX * 2, plotRadiusY * 2);
+
+        // ラベル
+        ctx.fillStyle = this.colors.text;
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText('角度 θ ([-180°, 180°])', cx, cy + plotRadiusY + 4);
+
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('角速度 ω [rad/s]', cx - plotRadiusX - 4, cy);
+
+        // 角速度の表示レンジ（動的または固定）
+        const maxOmega = Math.max(10, Math.abs(physics.omega) * 1.2);
+
+        // 目標点のマーカー（目標角度, ω=0）
+        const targetX = cx + (physics.targetAngleDeg / 180.0) * plotRadiusX;
+        ctx.fillStyle = this.colors.target;
+        ctx.beginPath();
+        ctx.arc(targetX, cy, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (this.phaseHistory.length < 2) return;
+
+        // 軌跡プロット
+        ctx.save();
+        ctx.strokeStyle = this.colors.phaseLine;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        let prevDeg = null;
+
+        for (let i = 0; i < this.phaseHistory.length; i++) {
+            const p = this.phaseHistory[i];
+            const px = cx + (p.thetaDeg / 180.0) * plotRadiusX;
+            const py = cy - (p.omega / maxOmega) * plotRadiusY;
+
+            if (prevDeg !== null && Math.abs(p.thetaDeg - prevDeg) > 180) {
+                ctx.moveTo(px, py);
+            } else if (i === 0) {
+                ctx.moveTo(px, py);
+            } else {
+                ctx.lineTo(px, py);
+            }
+            prevDeg = p.thetaDeg;
+        }
+        ctx.stroke();
+
+        // 最新の現在点
+        const currentP = this.phaseHistory[this.phaseHistory.length - 1];
+        const curX = cx + (currentP.thetaDeg / 180.0) * plotRadiusX;
+        const curY = cy - (currentP.omega / maxOmega) * plotRadiusY;
+
+        ctx.fillStyle = this.colors.phaseDot;
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(curX, curY, 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+}
+
+/**
+ * app.js - メインアプリケーション制御・イベントハンドリング・ゲームループ（モバイル＆タッチ対応）
+ */
+
+
+
+
+
+class PendulumApp {
+    constructor() {
+        this.physics = new PendulumPhysics();
+
+        // Canvas要素
+        this.simCanvas = document.getElementById('simCanvas');
+        this.timeCanvas = document.getElementById('timeCanvas');
+        this.phaseCanvas = document.getElementById('phaseCanvas');
+
+        this.renderer = new PendulumRenderer(this.simCanvas);
+        this.charts = new ControlCharts(this.timeCanvas, this.phaseCanvas);
+
+        // 操作状態
+        this.isPaused = false;
+        this.controlMode = 'momentary'; // 'momentary' | 'throttle'
+        this.appliedTau = 0.0;
+        this.keyState = {
+            ArrowLeft: false,
+            ArrowRight: false,
+            KeyA: false,
+            KeyD: false
+        };
+
+        // タッチ＆マウスドラッグ状態
+        this.isDragging = false;
+        this.dragLastAngle = 0;
+        this.dragLastTime = 0;
+
+        // 整定判定（ゲーム要素）
+        this.holdingTime = 0.0;
+        this.requiredHoldTime = 2.0;
+        this.stabilized = false;
+        this.angleToleranceDeg = 6.0;
+        this.omegaTolerance = 0.35;
+
+        // アニメーションループ用タイムスタンプ
+        this.lastTimestamp = performance.now();
+        this.chartSampleTimer = 0.0;
+        this.chartSampleInterval = 0.02;
+
+        // プリセット定義
+        this.presets = {
+            default: {
+                name: '標準設定',
+                l: 1.0, m: 1.0, tauMax: 8.0, c: 0.15, g: 9.8, targetDeg: 180,
+                desc: '倒立振子(180°)を目指す基本構成'
+            },
+            pendulum90: {
+                name: '水平静止 (90°)',
+                l: 1.0, m: 1.0, tauMax: 12.0, c: 0.2, g: 9.8, targetDeg: 90,
+                desc: '重力に対抗して90度でキープする'
+            },
+            lowTorque: {
+                name: 'スイングアップ必須',
+                l: 1.0, m: 1.0, tauMax: 5.0, c: 0.08, g: 9.8, targetDeg: 180,
+                desc: '最大トルク < mgl のため助走が必要'
+            },
+            heavyLong: {
+                name: '長尺・大質量',
+                l: 1.8, m: 2.5, tauMax: 20.0, c: 0.25, g: 9.8, targetDeg: 180,
+                desc: '大きな慣性モーメントの振子'
+            },
+            fastShort: {
+                name: '短尺・高速',
+                l: 0.5, m: 0.5, tauMax: 6.0, c: 0.1, g: 9.8, targetDeg: 180,
+                desc: '素早い反応が求められる機敏な振子'
+            },
+            zeroG: {
+                name: '無重力 (宇宙)',
+                l: 1.0, m: 1.0, tauMax: 4.0, c: 0.05, g: 0.0, targetDeg: 90,
+                desc: '重力のない空間での回転制御'
+            }
+        };
+
+        this.initDOM();
+        this.initEvents();
+        this.initDragEvents();
+        this.initMobileTabs();
+        this.initShareModal();
+        this.updateParamUIFromPhysics();
+
+        this.handleResize();
+        requestAnimationFrame((t) => this.loop(t));
+    }
+
+    initDOM() {
+        this.inputs = {
+            l: document.getElementById('param-l'),
+            lVal: document.getElementById('val-l'),
+            m: document.getElementById('param-m'),
+            mVal: document.getElementById('val-m'),
+            tauMax: document.getElementById('param-tauMax'),
+            tauMaxVal: document.getElementById('val-tauMax'),
+            targetDeg: document.getElementById('param-targetDeg'),
+            targetDegVal: document.getElementById('val-targetDeg'),
+            c: document.getElementById('param-c'),
+            cVal: document.getElementById('val-c'),
+            g: document.getElementById('param-g'),
+            gVal: document.getElementById('val-g')
+        };
+
+        this.gaugeFill = document.getElementById('gauge-fill');
+        this.torqueText = document.getElementById('torque-val-text');
+
+        this.btnLeft = document.getElementById('btn-left');
+        this.btnRight = document.getElementById('btn-right');
+        this.btnZero = document.getElementById('btn-zero');
+        this.btnReset = document.getElementById('btn-reset');
+        this.btnPause = document.getElementById('btn-pause');
+
+        this.btnModeMomentary = document.getElementById('mode-momentary');
+        this.btnModeThrottle = document.getElementById('mode-throttle');
+    }
+
+    initEvents() {
+        window.addEventListener('resize', () => this.handleResize());
+
+        // キーボード操作
+        window.addEventListener('keydown', (e) => this.handleKeyDown(e));
+        window.addEventListener('keyup', (e) => this.handleKeyUp(e));
+
+        // トルクボタン（マウス/タッチ共通バインド）
+        const bindHoldButton = (btn, dir) => {
+            const start = (ev) => {
+                if (ev.cancelable) ev.preventDefault();
+                if (this.controlMode === 'momentary') {
+                    if (dir === 'left') this.keyState.ArrowLeft = true;
+                    if (dir === 'right') this.keyState.ArrowRight = true;
+                } else {
+                    const step = this.physics.tauMax * 0.15;
+                    this.appliedTau += (dir === 'left' ? step : -step);
+                    this.appliedTau = Math.max(-this.physics.tauMax, Math.min(this.physics.tauMax, this.appliedTau));
+                }
+            };
+            const end = (ev) => {
+                if (ev.cancelable) ev.preventDefault();
+                if (this.controlMode === 'momentary') {
+                    if (dir === 'left') this.keyState.ArrowLeft = false;
+                    if (dir === 'right') this.keyState.ArrowRight = false;
+                }
+            };
+
+            btn.addEventListener('mousedown', start);
+            btn.addEventListener('mouseup', end);
+            btn.addEventListener('mouseleave', end);
+            btn.addEventListener('touchstart', start, { passive: false });
+            btn.addEventListener('touchend', end, { passive: false });
+            btn.addEventListener('touchcancel', end, { passive: false });
+        };
+
+        bindHoldButton(this.btnLeft, 'left');
+        bindHoldButton(this.btnRight, 'right');
+
+        this.btnZero.addEventListener('click', () => {
+            this.appliedTau = 0.0;
+        });
+
+        this.btnReset.addEventListener('click', () => {
+            this.resetSimulation();
+        });
+
+        this.btnPause.addEventListener('click', () => {
+            this.isPaused = !this.isPaused;
+            this.btnPause.textContent = this.isPaused ? '▶ 再開' : '⏸ 一時停止';
+        });
+
+        this.btnModeMomentary.addEventListener('click', () => {
+            this.setControlMode('momentary');
+        });
+        this.btnModeThrottle.addEventListener('click', () => {
+            this.setControlMode('throttle');
+        });
+
+        // パラメータスライダー
+        const setupSlider = (slider, valDisplay, key, decimals, unit = '', onChange = null) => {
+            slider.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                this.physics[key] = val;
+                valDisplay.textContent = val.toFixed(decimals) + unit;
+                if (onChange) onChange(val);
+            });
+        };
+
+        setupSlider(this.inputs.l, this.inputs.lVal, 'l', 2, ' m');
+        setupSlider(this.inputs.m, this.inputs.mVal, 'm', 2, ' kg');
+        setupSlider(this.inputs.tauMax, this.inputs.tauMaxVal, 'tauMax', 1, ' Nm');
+        setupSlider(this.inputs.c, this.inputs.cVal, 'c', 2, ' Ns/m');
+        setupSlider(this.inputs.g, this.inputs.gVal, 'g', 1, ' m/s²');
+        setupSlider(this.inputs.targetDeg, this.inputs.targetDegVal, 'targetAngleDeg', 0, '°', () => {
+            this.holdingTime = 0.0;
+            this.stabilized = false;
+        });
+
+        // プリセットボタン
+        document.querySelectorAll('.btn-preset').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const key = btn.dataset.preset;
+                this.applyPreset(key);
+            });
+        });
+    }
+
+    /**
+     * Canvas上のおもりを指・マウスで掴んでドラッグできる操作を実装
+     */
+    initDragEvents() {
+        const getCanvasCoord = (e) => {
+            const rect = this.simCanvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        };
+
+        const onStart = (e) => {
+            const pos = getCanvasCoord(e);
+            const bobInfo = this.renderer.getBobPosition(this.physics);
+
+            // おもり判定（指で触りやすいように当たり判定半径を広めに）
+            const hitRadius = Math.max(30, bobInfo.radius * 1.8);
+            const dist = Math.hypot(pos.x - bobInfo.x, pos.y - bobInfo.y);
+
+            if (dist <= hitRadius) {
+                this.isDragging = true;
+                this.dragLastAngle = this.physics.theta;
+                this.dragLastTime = performance.now();
+                if (e.cancelable) e.preventDefault();
+            }
+        };
+
+        const onMove = (e) => {
+            if (!this.isDragging) return;
+            if (e.cancelable) e.preventDefault();
+
+            const pos = getCanvasCoord(e);
+            const metrics = this.renderer.getLayoutMetrics(this.physics);
+
+            // 支点(pivotX, pivotY)からタッチ位置へのベクトル
+            const dx = pos.x - metrics.pivotX;
+            const dy = pos.y - metrics.pivotY;
+
+            // 角度計算: dx = L sin(θ), dy = L cos(θ) => θ = atan2(dx, dy)
+            const targetTheta = Math.atan2(dx, dy);
+
+            // 連続的な回転を追従
+            const diff = PendulumPhysics.normalizeAngle(targetTheta - this.physics.theta);
+            this.physics.theta += diff;
+
+            // 速度の推定
+            const now = performance.now();
+            const dt = (now - this.dragLastTime) / 1000.0;
+            if (dt > 0.005) {
+                this.physics.omega = diff / dt;
+                this.dragLastAngle = this.physics.theta;
+                this.dragLastTime = now;
+            }
+        };
+
+        const onEnd = (e) => {
+            if (this.isDragging) {
+                this.isDragging = false;
+                // 角速度の上限リミット（異常なフリックによる吹き飛びを防止）
+                this.physics.omega = Math.max(-20, Math.min(20, this.physics.omega));
+                if (e.cancelable) e.preventDefault();
+            }
+        };
+
+        this.simCanvas.addEventListener('mousedown', onStart);
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onEnd);
+
+        this.simCanvas.addEventListener('touchstart', onStart, { passive: false });
+        window.addEventListener('touchmove', onMove, { passive: false });
+        window.addEventListener('touchend', onEnd, { passive: false });
+        window.addEventListener('touchcancel', onEnd, { passive: false });
+    }
+
+    /**
+     * モバイル用タブナビゲーションの初期化
+     */
+    initMobileTabs() {
+        const tabBtns = document.querySelectorAll('.mobile-tab-btn');
+        if (!tabBtns.length) return;
+
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetTab = btn.dataset.tab;
+                tabBtns.forEach(b => b.classList.toggle('active', b === btn));
+
+                document.querySelectorAll('.tab-section').forEach(sec => {
+                    sec.classList.toggle('tab-active', sec.id === `tab-${targetTab}`);
+                });
+
+                // 表示切り替え後の再リサイズ
+                setTimeout(() => this.handleResize(), 50);
+            });
+        });
+    }
+
+    /**
+     * スマホ共有用QRコードモーダルの初期化
+     */
+    initShareModal() {
+        const btnShare = document.getElementById('btn-share-mobile');
+        const modal = document.getElementById('qr-modal');
+        const btnClose = document.getElementById('btn-close-modal');
+        const qrImg = document.getElementById('qr-code-img');
+        const urlInput = document.getElementById('share-url-input');
+        const btnCopy = document.getElementById('btn-copy-url');
+
+        if (!btnShare || !modal) return;
+
+        const openModal = () => {
+            // 現在のアクセスURL（もしfile://ならローカルサーバー案内）
+            let currentUrl = window.location.href;
+            if (currentUrl.startsWith('file://')) {
+                // fileプロトコルの場合はローカルサーバーまたはヒント表示
+                currentUrl = 'http://localhost:8000';
+            }
+
+            urlInput.value = currentUrl;
+            // 無料QRコード生成APIを利用して即時QR生成
+            qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=8&data=${encodeURIComponent(currentUrl)}`;
+
+            modal.style.display = 'flex';
+        };
+
+        const closeModal = () => {
+            modal.style.display = 'none';
+        };
+
+        btnShare.addEventListener('click', openModal);
+        btnClose.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+
+        btnCopy.addEventListener('click', () => {
+            urlInput.select();
+            navigator.clipboard.writeText(urlInput.value).then(() => {
+                const originalText = btnCopy.textContent;
+                btnCopy.textContent = '完了!';
+                setTimeout(() => { btnCopy.textContent = originalText; }, 1500);
+            });
+        });
+    }
+
+    setControlMode(mode) {
+        this.controlMode = mode;
+        this.btnModeMomentary.classList.toggle('active', mode === 'momentary');
+        this.btnModeThrottle.classList.toggle('active', mode === 'throttle');
+        this.appliedTau = 0.0;
+    }
+
+    handleResize() {
+        this.renderer.resize();
+        this.charts.resize();
+    }
+
+    handleKeyDown(e) {
+        if (e.target.tagName === 'INPUT') return;
+
+        if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+            this.keyState.ArrowLeft = true;
+            if (this.controlMode === 'throttle') {
+                this.appliedTau = Math.min(this.physics.tauMax, this.appliedTau + this.physics.tauMax * 0.1);
+            }
+            e.preventDefault();
+        } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+            this.keyState.ArrowRight = true;
+            if (this.controlMode === 'throttle') {
+                this.appliedTau = Math.max(-this.physics.tauMax, this.appliedTau - this.physics.tauMax * 0.1);
+            }
+            e.preventDefault();
+        } else if (e.code === 'Space') {
+            this.appliedTau = 0.0;
+            e.preventDefault();
+        } else if (e.code === 'KeyR') {
+            this.resetSimulation();
+            e.preventDefault();
+        }
+    }
+
+    handleKeyUp(e) {
+        if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+            this.keyState.ArrowLeft = false;
+        } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+            this.keyState.ArrowRight = false;
+        }
+    }
+
+    updateAppliedTorque(dt) {
+        if (this.controlMode === 'momentary') {
+            const left = this.keyState.ArrowLeft;
+            const right = this.keyState.ArrowRight;
+
+            if (left && !right) {
+                this.appliedTau = this.physics.tauMax;
+                this.btnLeft.classList.add('left-active');
+                this.btnRight.classList.remove('right-active');
+            } else if (right && !left) {
+                this.appliedTau = -this.physics.tauMax;
+                this.btnRight.classList.add('right-active');
+                this.btnLeft.classList.remove('left-active');
+            } else {
+                this.appliedTau = 0.0;
+                this.btnLeft.classList.remove('left-active');
+                this.btnRight.classList.remove('right-active');
+            }
+        } else {
+            this.btnLeft.classList.toggle('left-active', this.appliedTau > 0.05);
+            this.btnRight.classList.toggle('right-active', this.appliedTau < -0.05);
+        }
+
+        const ratio = this.appliedTau / this.physics.tauMax;
+        if (ratio >= 0) {
+            this.gaugeFill.className = 'gauge-fill ccw';
+            this.gaugeFill.style.left = '50%';
+            this.gaugeFill.style.width = `${ratio * 50}%`;
+        } else {
+            const width = Math.abs(ratio) * 50;
+            this.gaugeFill.className = 'gauge-fill cw';
+            this.gaugeFill.style.left = `${50 - width}%`;
+            this.gaugeFill.style.width = `${width}%`;
+        }
+        this.torqueText.textContent = `${this.appliedTau.toFixed(2)} Nm (${(ratio * 100).toFixed(0)}%)`;
+    }
+
+    updateStabilization(dt) {
+        if (this.isDragging) {
+            this.holdingTime = 0.0;
+            this.stabilized = false;
+            return;
+        }
+
+        const errDeg = Math.abs(this.physics.angleErrorDeg);
+        const omega = Math.abs(this.physics.omega);
+
+        if (errDeg <= this.angleToleranceDeg && omega <= this.omegaTolerance) {
+            this.holdingTime += dt;
+            if (this.holdingTime >= this.requiredHoldTime) {
+                this.stabilized = true;
+            }
+        } else {
+            this.holdingTime = Math.max(0, this.holdingTime - dt * 2.0);
+            if (this.holdingTime === 0) {
+                this.stabilized = false;
+            }
+        }
+    }
+
+    resetSimulation() {
+        this.physics.reset(0, 0);
+        this.charts.clear();
+        this.appliedTau = 0.0;
+        this.holdingTime = 0.0;
+        this.stabilized = false;
+    }
+
+    applyPreset(presetKey) {
+        const p = this.presets[presetKey];
+        if (!p) return;
+
+        this.physics.l = p.l;
+        this.physics.m = p.m;
+        this.physics.tauMax = p.tauMax;
+        this.physics.c = p.c;
+        this.physics.g = p.g;
+        this.physics.targetAngleDeg = p.targetDeg;
+
+        this.updateParamUIFromPhysics();
+        this.resetSimulation();
+    }
+
+    updateParamUIFromPhysics() {
+        this.inputs.l.value = this.physics.l;
+        this.inputs.lVal.textContent = this.physics.l.toFixed(2) + ' m';
+
+        this.inputs.m.value = this.physics.m;
+        this.inputs.mVal.textContent = this.physics.m.toFixed(2) + ' kg';
+
+        this.inputs.tauMax.value = this.physics.tauMax;
+        this.inputs.tauMaxVal.textContent = this.physics.tauMax.toFixed(1) + ' Nm';
+
+        this.inputs.c.value = this.physics.c;
+        this.inputs.cVal.textContent = this.physics.c.toFixed(2) + ' Ns/m';
+
+        this.inputs.g.value = this.physics.g;
+        this.inputs.gVal.textContent = this.physics.g.toFixed(1) + ' m/s²';
+
+        this.inputs.targetDeg.value = this.physics.targetAngleDeg;
+        this.inputs.targetDegVal.textContent = this.physics.targetAngleDeg.toFixed(0) + '°';
+    }
+
+    loop(timestamp) {
+        const elapsed = (timestamp - this.lastTimestamp) / 1000.0;
+        this.lastTimestamp = timestamp;
+
+        const dt = Math.min(elapsed, 0.05);
+
+        if (!this.isPaused && dt > 0) {
+            this.updateAppliedTorque(dt);
+
+            // ドラッグ中でなければ物理シミュレーションを更新
+            if (!this.isDragging) {
+                this.physics.update(dt, this.appliedTau);
+            }
+
+            this.updateStabilization(dt);
+
+            this.chartSampleTimer += dt;
+            if (this.chartSampleTimer >= this.chartSampleInterval) {
+                this.charts.addSample(this.physics);
+                this.chartSampleTimer = 0.0;
+            }
+        }
+
+        const status = {
+            holdingTime: this.holdingTime,
+            holdingProgress: Math.min(1.0, this.holdingTime / this.requiredHoldTime),
+            stabilized: this.stabilized,
+            isDragging: this.isDragging
+        };
+
+        this.renderer.draw(this.physics, status);
+        this.charts.render(this.physics);
+
+        requestAnimationFrame((t) => this.loop(t));
+    }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+    window.app = new PendulumApp();
+});
+
+</script>
+</body>
+</html>

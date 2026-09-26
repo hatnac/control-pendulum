@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0f172a">
+    <title>制御工学学習シミュレータ | 振子モータ制御</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- ヘッダー -->
+    <header>
+        <div class="logo-container">
+            <span class="logo-badge">CONTROL ENG</span>
+            <h1>振子モータ制御</h1>
+        </div>
+        <div class="header-actions">
+            <button id="btn-share-mobile" class="btn" title="スマホでアクセスするためのQRコードを表示">📱 スマホ共有</button>
+            <button id="btn-pause" class="btn">⏸ 一時停止</button>
+            <button id="btn-reset" class="btn btn-danger">↺ リセット</button>
+        </div>
+    </header>
+
+    <!-- スマホ接続用QRコードモーダル -->
+    <div id="qr-modal" class="modal-backdrop" style="display: none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>📱 スマホからアクセス</h3>
+                <button id="btn-close-modal" class="btn-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">
+                    スマートフォンのカメラで以下のQRコードを読み取ると、アプリが開きます。
+                </p>
+                <div class="qr-image-wrapper">
+                    <img id="qr-code-img" src="" alt="QR Code" style="width: 180px; height: 180px; border-radius: 8px; background: #ffffff; padding: 6px;">
+                </div>
+                <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 6px;">
+                    <span style="font-size: 0.75rem; color: var(--text-muted);">接続URL:</span>
+                    <div style="display: flex; gap: 6px;">
+                        <input id="share-url-input" type="text" readonly style="flex: 1; background: #0b0f19; border: 1px solid var(--border); color: var(--text-primary); padding: 6px 10px; border-radius: 4px; font-family: var(--font-mono); font-size: 0.8rem;">
+                        <button id="btn-copy-url" class="btn">コピー</button>
+                    </div>
+                </div>
+                <div style="margin-top: 14px; padding: 8px 10px; background: #0b0f19; border-radius: 6px; font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;">
+                    ※ 同じWi-Fi（家庭内や大学・研究室）に接続しているスマホからアクセス可能です。<br>
+                    ※ GitHub Pages等にアップロードすると、世界中どこからでもアクセスできるようになります。
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- モバイル用ナビゲーションタブ（スマホ画面で表示） -->
+    <nav class="mobile-nav-tabs">
+        <button class="mobile-tab-btn active" data-tab="sim">🎮 振子操作</button>
+        <button class="mobile-tab-btn" data-tab="charts">📈 応答グラフ</button>
+        <button class="mobile-tab-btn" data-tab="settings">⚙️ 設定</button>
+    </nav>
+
+    <!-- メインコンテンツ -->
+    <main class="app-container">
+        <!-- セクション 1: 振子シミュレータ本体 -->
+        <section id="tab-sim" class="card sim-section tab-section tab-active">
+            <div class="card-title">
+                <span>振子シミュレーション (360°回転)</span>
+                <span style="font-size: 0.75rem; color: var(--accent-yellow);">☝️ 指・マウスで掴んで動かせます</span>
+            </div>
+
+            <!-- Canvas -->
+            <div class="canvas-wrapper">
+                <canvas id="simCanvas"></canvas>
+            </div>
+
+            <!-- トルク操作パネル -->
+            <div class="control-bar">
+                <div class="torque-meter-container">
+                    <span class="torque-meter-label">モータ出力:</span>
+                    <div class="torque-gauge-bar">
+                        <div class="gauge-center-line"></div>
+                        <div id="gauge-fill" class="gauge-fill"></div>
+                    </div>
+                    <span id="torque-val-text" class="torque-meter-label" style="text-align: right; min-width: 125px;">0.00 Nm (0%)</span>
+                </div>
+
+                <div class="torque-buttons">
+                    <button id="btn-left" class="btn-motor">◀ 左回転 (← / A)</button>
+                    <button id="btn-zero" class="btn" style="padding: 12px 14px;" title="トルクを0にする">切断 (Space)</button>
+                    <button id="btn-right" class="btn-motor">右回転 (→ / D) ▶</button>
+                </div>
+
+                <div class="control-tips">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span>操作モード:</span>
+                        <div class="mode-toggle-group">
+                            <button id="mode-momentary" class="btn-mode active">押しっぱなし</button>
+                            <button id="mode-throttle" class="btn-mode">スロットル</button>
+                        </div>
+                    </div>
+                    <div>
+                        <kbd>←</kbd> <kbd>→</kbd> トルク操作 / <kbd>Space</kbd> ニュートラル / <kbd>R</kbd> リセット
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- セクション 2: 制御工学ダッシュボード（時系列グラフ ＆ 相平面） -->
+        <section id="tab-charts" class="card charts-section tab-section">
+            <div class="chart-box">
+                <div class="card-title">
+                    <span>時系列応答 (Time History)</span>
+                    <span style="font-size: 0.72rem; color: var(--text-muted);">θ・θ_ref・τ</span>
+                </div>
+                <div class="chart-canvas-wrapper">
+                    <canvas id="timeCanvas"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-box">
+                <div class="card-title">
+                    <span>相平面プロット (Phase Plane: θ vs ω)</span>
+                    <span style="font-size: 0.72rem; color: var(--text-muted);">平衡点と状態軌跡</span>
+                </div>
+                <div class="chart-canvas-wrapper">
+                    <canvas id="phaseCanvas"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- セクション 3: パラメータ設定 & プリセット & 解説 -->
+        <section id="tab-settings" class="settings-section tab-section">
+            <!-- パラメータ変更スライダー -->
+            <div class="card">
+                <div class="card-title">
+                    <span>物理・制御パラメータ調整</span>
+                    <span style="font-size: 0.72rem; color: var(--text-muted);">リアルタイム反映</span>
+                </div>
+                <div class="param-grid">
+                    <!-- 長さ l -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">棒の長さ (l)</span>
+                            <span id="val-l" class="param-value">1.00 m</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-l" type="range" min="0.3" max="2.5" step="0.05" value="1.0">
+                        </div>
+                    </div>
+
+                    <!-- 質量 m -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">おもりの質量 (m)</span>
+                            <span id="val-m" class="param-value">1.00 kg</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-m" type="range" min="0.1" max="5.0" step="0.1" value="1.0">
+                        </div>
+                    </div>
+
+                    <!-- 最大トルク tauMax -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">最大トルク (τ_max)</span>
+                            <span id="val-tauMax" class="param-value">8.0 Nm</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-tauMax" type="range" min="1.0" max="25.0" step="0.5" value="8.0">
+                        </div>
+                    </div>
+
+                    <!-- 目標角度 targetDeg -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">目標角度 (θ_ref)</span>
+                            <span id="val-targetDeg" class="param-value">180°</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-targetDeg" type="range" min="-180" max="180" step="5" value="180">
+                        </div>
+                    </div>
+
+                    <!-- 粘性減衰 c -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">粘性減衰 (c)</span>
+                            <span id="val-c" class="param-value">0.15 Ns/m</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-c" type="range" min="0.0" max="1.5" step="0.02" value="0.15">
+                        </div>
+                    </div>
+
+                    <!-- 重力加速度 g -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">重力加速度 (g)</span>
+                            <span id="val-g" class="param-value">9.8 m/s²</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-g" type="range" min="0.0" max="20.0" step="0.2" value="9.8">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- プリセット & 制御工学ヒント -->
+            <div class="card preset-panel">
+                <div class="card-title">
+                    <span>学習プリセット</span>
+                </div>
+                <div class="preset-list">
+                    <button class="btn-preset" data-preset="default">
+                        <span class="preset-name">1. 標準設定 (倒立180°)</span>
+                        <span class="preset-desc">倒立振子を手動で静止させる基本</span>
+                    </button>
+                    <button class="btn-preset" data-preset="pendulum90">
+                        <span class="preset-name">2. 水平保持 (90°)</span>
+                        <span class="preset-desc">重力トルクと釣り合うトルクの保持</span>
+                    </button>
+                    <button class="btn-preset" data-preset="lowTorque">
+                        <span class="preset-name">3. スイングアップ必須</span>
+                        <span class="preset-desc">τ_max &lt; mgl。助走をつけて振り上げる</span>
+                    </button>
+                    <button class="btn-preset" data-preset="fastShort">
+                        <span class="preset-name">4. 短尺・俊敏振子</span>
+                        <span class="preset-desc">固有周期が短く高応答が必要</span>
+                    </button>
+                    <button class="btn-preset" data-preset="heavyLong">
+                        <span class="preset-name">5. 長尺・高慣性</span>
+                        <span class="preset-desc">慣性モーメント大。急停止困難</span>
+                    </button>
+                    <button class="btn-preset" data-preset="zeroG">
+                        <span class="preset-name">6. 無重力 (宇宙)</span>
+                        <span class="preset-desc">純粋な回転慣性系の制御</span>
+                    </button>
+                </div>
+
+                <div style="margin-top: 8px; padding: 10px; background: #0b0f19; border-radius: var(--radius-sm); border: 1px solid var(--border); font-size: 0.76rem; color: var(--text-secondary); line-height: 1.4;">
+                    <strong style="color: var(--accent-yellow);">💡 制御工学の着眼点:</strong><br>
+                    • 倒立振子(180°)は不安定平衡点のため、手動でピタッと止めるのは非常に困難です。<br>
+                    • 「スイングアップ必須」モードでは、最大トルクが重力最大トルク $mgl$ 未満のため、共振（エネルギー励起）を利用した制御の必要性を体感できます。
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- メインスクリプト -->
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
