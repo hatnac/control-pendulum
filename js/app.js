@@ -1,15 +1,17 @@
 /**
  * app.js - メインアプリケーション制御・イベントハンドリング・ゲームループ
- * （アナログスライダー、スワイプ操作、マウスドラッグ、キーボード加速対応）
+ * （Manual / Auto PID位置制御、アナログスライダー、スワイプ操作対応）
  */
 
 import { PendulumPhysics } from './physics.js';
 import { PendulumRenderer } from './renderer.js';
 import { ControlCharts } from './charts.js';
+import { PIDController } from './pid.js';
 
 class PendulumApp {
     constructor() {
         this.physics = new PendulumPhysics();
+        this.pid = new PIDController();
 
         // Canvas要素
         this.simCanvas = document.getElementById('simCanvas');
@@ -21,6 +23,7 @@ class PendulumApp {
 
         // 操作状態
         this.isPaused = false;
+        this.driveMode = 'manual'; // 'manual' (手動操作) | 'auto' (PID位置制御)
         this.sliderMode = 'spring'; // 'spring' (離すと0復帰) | 'hold' (出力維持)
         this.appliedTau = 0.0;
         this.isSliderDragging = false;
@@ -55,12 +58,12 @@ class PendulumApp {
         this.presets = {
             default: {
                 name: '標準設定',
-                l: 1.0, m: 1.0, tauMax: 8.0, c: 0.15, g: 9.8, targetDeg: 180,
+                l: 1.0, m: 1.0, tauMax: 12.0, c: 0.15, g: 9.8, targetDeg: 180,
                 desc: '倒立振子(180°)を目指す基本構成'
             },
             pendulum90: {
                 name: '水平静止 (90°)',
-                l: 1.0, m: 1.0, tauMax: 12.0, c: 0.2, g: 9.8, targetDeg: 90,
+                l: 1.0, m: 1.0, tauMax: 15.0, c: 0.2, g: 9.8, targetDeg: 90,
                 desc: '重力に対抗して90度でキープする'
             },
             lowTorque: {
@@ -70,17 +73,17 @@ class PendulumApp {
             },
             heavyLong: {
                 name: '長尺・大質量',
-                l: 1.8, m: 2.5, tauMax: 20.0, c: 0.25, g: 9.8, targetDeg: 180,
+                l: 1.8, m: 2.5, tauMax: 25.0, c: 0.25, g: 9.8, targetDeg: 180,
                 desc: '大きな慣性モーメントの振子'
             },
             fastShort: {
                 name: '短尺・高速',
-                l: 0.5, m: 0.5, tauMax: 6.0, c: 0.1, g: 9.8, targetDeg: 180,
+                l: 0.5, m: 0.5, tauMax: 8.0, c: 0.1, g: 9.8, targetDeg: 180,
                 desc: '素早い反応が求められる機敏な振子'
             },
             zeroG: {
                 name: '無重力 (宇宙)',
-                l: 1.0, m: 1.0, tauMax: 4.0, c: 0.05, g: 0.0, targetDeg: 90,
+                l: 1.0, m: 1.0, tauMax: 6.0, c: 0.05, g: 0.0, targetDeg: 90,
                 desc: '重力のない空間での回転制御'
             }
         };
@@ -92,6 +95,7 @@ class PendulumApp {
         this.initMobileTabs();
         this.initShareModal();
         this.updateParamUIFromPhysics();
+        this.updatePIDUI();
 
         this.handleResize();
         requestAnimationFrame((t) => this.loop(t));
@@ -112,6 +116,22 @@ class PendulumApp {
             g: document.getElementById('param-g'),
             gVal: document.getElementById('val-g')
         };
+
+        // PIDパラメータDOM
+        this.pidInputs = {
+            kp: document.getElementById('param-kp'),
+            kpVal: document.getElementById('val-kp'),
+            ki: document.getElementById('param-ki'),
+            kiVal: document.getElementById('val-ki'),
+            kd: document.getElementById('param-kd'),
+            kdVal: document.getElementById('val-kd')
+        };
+
+        // ドライブモード切替DOM
+        this.btnDriveManual = document.getElementById('drive-manual');
+        this.btnDriveAuto = document.getElementById('drive-auto');
+        this.pidStatusBadge = document.getElementById('pid-status-badge');
+        this.manualModeToggles = document.getElementById('manual-mode-toggles');
 
         // スライダー関連DOM
         this.sliderArea = document.getElementById('torque-slider-area');
@@ -134,25 +154,36 @@ class PendulumApp {
     initEvents() {
         window.addEventListener('resize', () => this.handleResize());
 
+        // ドライブモード切替（Manual vs Auto）
+        this.btnDriveManual.addEventListener('click', () => {
+            this.setDriveMode('manual');
+        });
+        this.btnDriveAuto.addEventListener('click', () => {
+            this.setDriveMode('auto');
+        });
+
         // キーボード操作
         window.addEventListener('keydown', (e) => this.handleKeyDown(e));
         window.addEventListener('keyup', (e) => this.handleKeyUp(e));
 
         // ニュートラル切断ボタン
         this.btnZero.addEventListener('click', () => {
+            if (this.driveMode === 'auto') this.setDriveMode('manual');
             this.appliedTau = 0.0;
         });
 
         // 微動ボタン
         const stepVal = 0.5;
         this.btnNudgeLeft.addEventListener('click', () => {
+            if (this.driveMode === 'auto') this.setDriveMode('manual');
             this.appliedTau = Math.min(this.physics.tauMax, this.appliedTau + stepVal);
         });
         this.btnNudgeRight.addEventListener('click', () => {
+            if (this.driveMode === 'auto') this.setDriveMode('manual');
             this.appliedTau = Math.max(-this.physics.tauMax, this.appliedTau - stepVal);
         });
 
-        // スライダーモード切替（スプリング復帰 vs ホールド）
+        // スライダー復帰モード切替
         this.btnSpringMode.addEventListener('click', () => {
             this.setSliderMode('spring');
         });
@@ -163,7 +194,7 @@ class PendulumApp {
         // マウスホイールによる微調整
         const onWheel = (e) => {
             e.preventDefault();
-            // ホイール上回転（負）で左トルク増加、下回転（正）で右トルク増加
+            if (this.driveMode === 'auto') this.setDriveMode('manual');
             const delta = -Math.sign(e.deltaY) * (this.physics.tauMax * 0.04);
             this.appliedTau = Math.max(-this.physics.tauMax, Math.min(this.physics.tauMax, this.appliedTau + delta));
         };
@@ -186,7 +217,7 @@ class PendulumApp {
             this.resetSimulation();
         });
 
-        // パラメータスライダー
+        // 物理パラメータスライダー
         const setupSlider = (slider, valDisplay, key, decimals, unit = '', onChange = null) => {
             slider.addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
@@ -206,7 +237,34 @@ class PendulumApp {
             this.stabilized = false;
         });
 
-        // プリセットボタン
+        // PIDパラメータスライダー
+        if (this.pidInputs.kp) {
+            this.pidInputs.kp.addEventListener('input', (e) => {
+                this.pid.kp = parseFloat(e.target.value);
+                this.pidInputs.kpVal.textContent = this.pid.kp.toFixed(1);
+            });
+            this.pidInputs.ki.addEventListener('input', (e) => {
+                this.pid.ki = parseFloat(e.target.value);
+                this.pidInputs.kiVal.textContent = this.pid.ki.toFixed(1);
+            });
+            this.pidInputs.kd.addEventListener('input', (e) => {
+                this.pid.kd = parseFloat(e.target.value);
+                this.pidInputs.kdVal.textContent = this.pid.kd.toFixed(1);
+            });
+        }
+
+        // PIDプリセットボタン
+        document.querySelectorAll('.btn-pid-preset').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.pid.kp = parseFloat(btn.dataset.kp);
+                this.pid.ki = parseFloat(btn.dataset.ki);
+                this.pid.kd = parseFloat(btn.dataset.kd);
+                this.updatePIDUI();
+                this.pid.reset();
+            });
+        });
+
+        // 物理プリセットボタン
         document.querySelectorAll('.btn-preset').forEach(btn => {
             btn.addEventListener('click', () => {
                 const key = btn.dataset.preset;
@@ -216,8 +274,23 @@ class PendulumApp {
     }
 
     /**
+     * ドライブモード切替（Manual vs Auto）
+     */
+    setDriveMode(mode) {
+        this.driveMode = mode;
+        this.btnDriveManual.classList.toggle('active', mode === 'manual');
+        this.btnDriveAuto.classList.toggle('active', mode === 'auto');
+
+        if (mode === 'auto') {
+            this.pidStatusBadge.style.display = 'inline-flex';
+            this.pid.reset();
+        } else {
+            this.pidStatusBadge.style.display = 'none';
+        }
+    }
+
+    /**
      * インタラクティブ・アナログスライダー（タッチパドル）のイベント処理
-     * ポインターイベントを用いてマウスとタッチをシームレスに処理
      */
     initSliderEvents() {
         if (!this.sliderArea || !this.sliderTrack) return;
@@ -227,14 +300,16 @@ class PendulumApp {
             let p = (e.clientX - rect.left) / rect.width;
             p = Math.max(0, Math.min(1, p));
 
-            // 左端(0.0) => +1.0 (CCW 反時計回り正トルク)
-            // 中央(0.5) => 0.0
-            // 右端(1.0) => -1.0 (CW 時計回り負トルク)
             const ratio = (0.5 - p) * 2.0;
             this.appliedTau = ratio * this.physics.tauMax;
         };
 
         const onPointerDown = (e) => {
+            // スライダーを直接操作したら手動モードへ自動移行
+            if (this.driveMode === 'auto') {
+                this.setDriveMode('manual');
+            }
+
             this.isSliderDragging = true;
             this.sliderThumb.classList.add('dragging');
             try {
@@ -274,7 +349,7 @@ class PendulumApp {
     }
 
     /**
-     * Canvas上のおもりを指・マウスで掴んでドラッグできる操作
+     * Canvas上のおもりを指・マウスで掴んでドラッグできる操作（外乱実験にも利用可能）
      */
     initDragEvents() {
         const getCanvasCoord = (e) => {
@@ -357,13 +432,11 @@ class PendulumApp {
                     targetElem.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
 
-                // 描画サイズの再確認
                 this.handleResize();
                 setTimeout(() => this.handleResize(), 100);
             });
         });
 
-        // スクロール位置に応じてタブのハイライトを自動連動
         let scrollTimeout = null;
         window.addEventListener('scroll', () => {
             if (scrollTimeout) return;
@@ -434,12 +507,15 @@ class PendulumApp {
         if (e.target.tagName === 'INPUT') return;
 
         if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+            if (this.driveMode === 'auto') this.setDriveMode('manual');
             this.keyState.ArrowLeft = true;
             e.preventDefault();
         } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+            if (this.driveMode === 'auto') this.setDriveMode('manual');
             this.keyState.ArrowRight = true;
             e.preventDefault();
         } else if (e.code === 'Space') {
+            if (this.driveMode === 'auto') this.setDriveMode('manual');
             this.appliedTau = 0.0;
             e.preventDefault();
         } else if (e.code === 'KeyR') {
@@ -457,52 +533,57 @@ class PendulumApp {
     }
 
     /**
-     * トルク値の更新およびスライダー表示の同期
+     * トルク値の更新およびスライダー表示の同期（Manual & Auto PID）
      */
     updateAppliedTorque(dt) {
-        // 1. キーボード長押しによるスムーズなトルク加減算
-        if (this.keyState.ArrowLeft && !this.keyState.ArrowRight) {
-            this.keyHoldDurationLeft += dt;
-            const rate = Math.min(1.0, this.keyHoldDurationLeft / 0.3);
-            this.appliedTau = Math.min(this.physics.tauMax, this.appliedTau + this.physics.tauMax * dt * 2.2 * (0.3 + 0.7 * rate));
+        if (this.driveMode === 'auto') {
+            // Autoモード: PIDコントローラによるトルク自動算出
+            const targetRad = this.physics.targetAngleRad;
+            const currentRad = this.physics.theta;
+            const omega = this.physics.omega;
+            const tauPID = this.pid.compute(targetRad, currentRad, omega, dt, this.physics.tauMax);
+            this.appliedTau = tauPID;
         } else {
-            this.keyHoldDurationLeft = 0;
-        }
+            // Manualモード: キーボード長押しによるスムーズなトルク加減算
+            if (this.keyState.ArrowLeft && !this.keyState.ArrowRight) {
+                this.keyHoldDurationLeft += dt;
+                const rate = Math.min(1.0, this.keyHoldDurationLeft / 0.3);
+                this.appliedTau = Math.min(this.physics.tauMax, this.appliedTau + this.physics.tauMax * dt * 2.2 * (0.3 + 0.7 * rate));
+            } else {
+                this.keyHoldDurationLeft = 0;
+            }
 
-        if (this.keyState.ArrowRight && !this.keyState.ArrowLeft) {
-            this.keyHoldDurationRight += dt;
-            const rate = Math.min(1.0, this.keyHoldDurationRight / 0.3);
-            this.appliedTau = Math.max(-this.physics.tauMax, this.appliedTau - this.physics.tauMax * dt * 2.2 * (0.3 + 0.7 * rate));
-        } else {
-            this.keyHoldDurationRight = 0;
-        }
+            if (this.keyState.ArrowRight && !this.keyState.ArrowLeft) {
+                this.keyHoldDurationRight += dt;
+                const rate = Math.min(1.0, this.keyHoldDurationRight / 0.3);
+                this.appliedTau = Math.max(-this.physics.tauMax, this.appliedTau - this.physics.tauMax * dt * 2.2 * (0.3 + 0.7 * rate));
+            } else {
+                this.keyHoldDurationRight = 0;
+            }
 
-        // 2. スプリング復帰モード時の自動センタリング（離したときスッと0に戻る）
-        if (this.sliderMode === 'spring' && !this.isSliderDragging && !this.keyState.ArrowLeft && !this.keyState.ArrowRight) {
-            this.appliedTau += (0 - this.appliedTau) * Math.min(1.0, dt * 10.0);
-            if (Math.abs(this.appliedTau) < 0.005) {
-                this.appliedTau = 0.0;
+            // スプリング復帰モード時の自動センタリング（離したときスッと0に戻る）
+            if (this.sliderMode === 'spring' && !this.isSliderDragging && !this.keyState.ArrowLeft && !this.keyState.ArrowRight) {
+                this.appliedTau += (0 - this.appliedTau) * Math.min(1.0, dt * 10.0);
+                if (Math.abs(this.appliedTau) < 0.005) {
+                    this.appliedTau = 0.0;
+                }
             }
         }
 
-        // 3. スライダーUIと数値バッジの同期描画
+        // スライダーUIと数値バッジの同期描画（PID動作中もノブがリアルタイムに駆動）
         const tauMax = Math.max(0.1, this.physics.tauMax);
         const ratio = Math.max(-1.0, Math.min(1.0, this.appliedTau / tauMax));
 
-        // ノブ位置: ratio=+1(CCW・左端) => 0%, ratio=0 => 50%, ratio=-1(CW・右端) => 100%
         const thumbPosPercent = (0.5 - ratio * 0.5) * 100;
         this.sliderThumb.style.left = `${thumbPosPercent}%`;
 
-        // ゲージの塗り（中央50%から左右へ伸びる）
         if (ratio >= 0) {
-            // 左回転 (CCW: 正トルク・緑)
             const width = ratio * 50;
             this.gaugeFill.className = 'gauge-fill ccw';
             this.gaugeFill.style.left = `${50 - width}%`;
             this.gaugeFill.style.width = `${width}%`;
             this.torqueText.className = ratio > 0.01 ? 'torque-val-badge ccw' : 'torque-val-badge';
         } else {
-            // 右回転 (CW: 負トルク・赤)
             const width = Math.abs(ratio) * 50;
             this.gaugeFill.className = 'gauge-fill cw';
             this.gaugeFill.style.left = '50%';
@@ -539,6 +620,7 @@ class PendulumApp {
 
     resetSimulation() {
         this.physics.reset(0, 0);
+        this.pid.reset();
         this.charts.clear();
         this.appliedTau = 0.0;
         this.holdingTime = 0.0;
@@ -578,6 +660,18 @@ class PendulumApp {
 
         this.inputs.targetDeg.value = this.physics.targetAngleDeg;
         this.inputs.targetDegVal.textContent = this.physics.targetAngleDeg.toFixed(0) + '°';
+    }
+
+    updatePIDUI() {
+        if (!this.pidInputs.kp) return;
+        this.pidInputs.kp.value = this.pid.kp;
+        this.pidInputs.kpVal.textContent = this.pid.kp.toFixed(1);
+
+        this.pidInputs.ki.value = this.pid.ki;
+        this.pidInputs.kiVal.textContent = this.pid.ki.toFixed(1);
+
+        this.pidInputs.kd.value = this.pid.kd;
+        this.pidInputs.kdVal.textContent = this.pid.kd.toFixed(1);
     }
 
     loop(timestamp) {

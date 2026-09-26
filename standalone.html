@@ -296,6 +296,75 @@ canvas#simCanvas:active {
     user-select: none;
 }
 
+/* モード切替バー: Manual vs Auto */
+.drive-mode-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.drive-toggle-group {
+    display: flex;
+    gap: 4px;
+    background: #0b0f19;
+    padding: 3px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+}
+
+.btn-drive {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-drive:hover {
+    color: var(--text-primary);
+}
+
+.btn-drive.active {
+    background: linear-gradient(135deg, #0284c7, #2563eb);
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(2, 132, 199, 0.4);
+}
+
+.pid-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: #34d399;
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    padding: 3px 10px;
+    border-radius: 12px;
+}
+
+.pulse-dot {
+    width: 8px;
+    height: 8px;
+    background: #10b981;
+    border-radius: 50%;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(0.95); opacity: 0.8; }
+    50% { transform: scale(1.3); opacity: 1; box-shadow: 0 0 8px #10b981; }
+    100% { transform: scale(0.95); opacity: 0.8; }
+}
+
 .slider-header-row {
     display: flex;
     justify-content: space-between;
@@ -792,8 +861,22 @@ input[type="range"] {
                 <canvas id="simCanvas"></canvas>
             </div>
 
-            <!-- トルク操作パネル (アナログ連続スライダー ＆ スワイプ操作) -->
+            <!-- トルク操作パネル (Manual / Auto PID ＆ アナログ連続スライダー) -->
             <div class="control-bar">
+                <!-- モード切替バー: Manual (手動) vs Auto (PID自動制御) -->
+                <div class="drive-mode-bar">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 0.85rem; font-weight: 700; color: var(--text-secondary);">モード:</span>
+                        <div class="drive-toggle-group">
+                            <button id="drive-manual" class="btn-drive active" title="人間による手動操作">🎮 Manual (手動)</button>
+                            <button id="drive-auto" class="btn-drive" title="PIDコントローラによる目標角度への自動位置制御">🤖 Auto (PID制御)</button>
+                        </div>
+                    </div>
+                    <div id="pid-status-badge" class="pid-status-badge" style="display: none;">
+                        <span class="pulse-dot"></span> PID稼働中
+                    </div>
+                </div>
+
                 <!-- ステータス ＆ 設定ヘッダー -->
                 <div class="slider-header-row">
                     <div class="slider-title-group">
@@ -803,7 +886,7 @@ input[type="range"] {
 
                     <div class="slider-mode-group">
                         <button id="btn-zero" class="btn btn-sm" title="トルクを即座にゼロにします">切断 (Space)</button>
-                        <div class="mode-toggle-group">
+                        <div class="mode-toggle-group" id="manual-mode-toggles">
                             <button id="mode-spring" class="btn-mode active" title="指・マウスを離すと中央(0Nm)に戻るジョイスティック風操作">🔄 スプリング復帰</button>
                             <button id="mode-hold" class="btn-mode" title="指・マウスを離してもその出力を保持するスロットル操作">🔒 出力保持</button>
                         </div>
@@ -978,7 +1061,61 @@ input[type="range"] {
                 <div style="margin-top: 8px; padding: 10px; background: #0b0f19; border-radius: var(--radius-sm); border: 1px solid var(--border); font-size: 0.76rem; color: var(--text-secondary); line-height: 1.4;">
                     <strong style="color: var(--accent-yellow);">💡 制御工学の着眼点:</strong><br>
                     • 倒立振子(180°)は不安定平衡点のため、手動でピタッと止めるのは非常に困難です。<br>
-                    • 「スイングアップ必須」モードでは、最大トルクが重力最大トルク $mgl$ 未満のため、共振（エネルギー励起）を利用した制御の必要性を体感できます。
+                    • 「Auto (PID制御)」に切り替えると、PIDアルゴリズムが目標角度への安定化を自動で行います。おもりを指で引っ張って外乱を与えてみてください！
+                </div>
+            </div>
+
+            <!-- PID制御パラメータ調整カード -->
+            <div class="card pid-panel" style="grid-column: 1 / -1;">
+                <div class="card-title">
+                    <span>PID制御ゲイン調整 (Autoモード用)</span>
+                    <span style="font-size: 0.72rem; color: var(--accent-blue);">τ = Kp·e + Ki·∫e dt - Kd·ω</span>
+                </div>
+                <div class="param-grid">
+                    <!-- Kp -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">比例ゲイン (Kp)</span>
+                            <span id="val-kp" class="param-value">25.0</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-kp" type="range" min="0.0" max="60.0" step="1.0" value="25.0">
+                        </div>
+                        <span style="font-size: 0.68rem; color: var(--text-muted);">偏差に応じた基本復元力（高すぎると振動）</span>
+                    </div>
+
+                    <!-- Ki -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">積分ゲイン (Ki)</span>
+                            <span id="val-ki" class="param-value">4.0</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-ki" type="range" min="0.0" max="25.0" step="0.5" value="4.0">
+                        </div>
+                        <span style="font-size: 0.68rem; color: var(--text-muted);">重力・摩擦の定常偏差をゼロ消去</span>
+                    </div>
+
+                    <!-- Kd -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">微分ゲイン (Kd)</span>
+                            <span id="val-kd" class="param-value">6.0</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-kd" type="range" min="0.0" max="20.0" step="0.5" value="6.0">
+                        </div>
+                        <span style="font-size: 0.68rem; color: var(--text-muted);">角速度を抑える制動ブレーキ（ダンピング）</span>
+                    </div>
+                </div>
+
+                <!-- PIDゲインプリセット -->
+                <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                    <span style="font-size: 0.76rem; color: var(--text-secondary); font-weight: 700;">ゲインプリセット:</span>
+                    <button class="btn btn-sm btn-pid-preset" data-kp="25" data-ki="4" data-kd="6">1. 安定バランス (標準)</button>
+                    <button class="btn btn-sm btn-pid-preset" data-kp="20" data-ki="0" data-kd="0">2. P制御のみ (振動を観察)</button>
+                    <button class="btn btn-sm btn-pid-preset" data-kp="25" data-ki="0" data-kd="8">3. PD制御 (高制動・ダンピング)</button>
+                    <button class="btn btn-sm btn-pid-preset" data-kp="45" data-ki="6" data-kd="9">4. 高速応答 (俊敏)</button>
                 </div>
             </div>
         </section>
@@ -2006,9 +2143,101 @@ class ControlCharts {
 }
 
 /**
- * app.js - メインアプリケーション制御・イベントハンドリング・ゲームループ
- * （アナログスライダー、スワイプ操作、マウスドラッグ、キーボード加速対応）
+ * pid.js - 振子位置制御用 PIDコントローラ
+ *
+ * 制御則:
+ *   u(t) = Kp * e(t) + Ki * ∫ e(t) dt - Kd * ω(t)
+ * 
+ * 特徴:
+ * - 角度の360°周期性を考慮した最短偏差 e(t) ∈ [-π, π] の算出
+ * - 微分項は角速度 ω を直接フィードバック（微分キック防止＆高S/N比）
+ * - モータ最大トルク飽和時のアンチワインドアップ (Anti-windup)
  */
+
+
+
+class PIDController {
+    constructor() {
+        // デフォルトゲイン設定（標準振子 1m, 1kg の倒立・位置決めに最適化）
+        this.kp = 25.0; // 比例ゲイン [Nm/rad]
+        this.ki = 4.0;  // 積分ゲイン [Nm/(rad*s)]
+        this.kd = 6.0;  // 微分ゲイン [Nm*s/rad]
+
+        // 内部状態
+        this.integral = 0.0;
+        this.maxIntegral = 8.0; // アンチワインドアップ上限
+        this.lastError = 0.0;
+
+        // 各項の現在値（デバッグ＆表示用）
+        this.pTerm = 0.0;
+        this.iTerm = 0.0;
+        this.dTerm = 0.0;
+        this.output = 0.0;
+    }
+
+    /**
+     * 積分器と内部状態のリセット
+     */
+    reset() {
+        this.integral = 0.0;
+        this.lastError = 0.0;
+        this.pTerm = 0.0;
+        this.iTerm = 0.0;
+        this.dTerm = 0.0;
+        this.output = 0.0;
+    }
+
+    /**
+     * トルク出力を計算
+     * @param {number} targetAngleRad 目標角度 [rad]
+     * @param {number} currentAngleRad 現在角度 [rad]
+     * @param {number} omega 現在角速度 [rad/s]
+     * @param {number} dt サンプリング時間 [s]
+     * @param {number} tauMax 最大トルク [Nm]
+     * @returns {number} 制御出力トルク τ [Nm]
+     */
+    compute(targetAngleRad, currentAngleRad, omega, dt, tauMax) {
+        if (dt <= 0) return 0;
+
+        // 1. 最短角度偏差 e ∈ [-π, π]
+        // 正: 目標が反時計回り(CCW)側にある => 正トルクを出して引き上げる
+        // 負: 目標が時計回り(CW)側にある => 負トルクを出して引き戻す
+        const error = PendulumPhysics.normalizeAngle(targetAngleRad - currentAngleRad);
+
+        // 2. P項 (比例)
+        this.pTerm = this.kp * error;
+
+        // 3. I項 (積分 + アンチワインドアップ)
+        this.integral += error * dt;
+        // 積分上限クリッピング
+        this.integral = Math.max(-this.maxIntegral, Math.min(this.maxIntegral, this.integral));
+        this.iTerm = this.ki * this.integral;
+
+        // 4. D項 (角速度フィードバック: de/dt = -ω)
+        // 角度が増加している時(ω>0)は反対方向のブレーキ(-Kd * ω)をかける
+        this.dTerm = -this.kd * omega;
+
+        // 5. 合計制御出力
+        let u = this.pTerm + this.iTerm + this.dTerm;
+
+        // 6. 出力サチュレーション
+        this.output = Math.max(-tauMax, Math.min(tauMax, u));
+
+        // トルクが飽和している場合は、積分項の増加を抑止（クランピング式アンチワインドアップ）
+        if ((u > tauMax && error > 0) || (u < -tauMax && error < 0)) {
+            this.integral -= error * dt;
+        }
+
+        this.lastError = error;
+        return this.output;
+    }
+}
+
+/**
+ * app.js - メインアプリケーション制御・イベントハンドリング・ゲームループ
+ * （Manual / Auto PID位置制御、アナログスライダー、スワイプ操作対応）
+ */
+
 
 
 
@@ -2017,6 +2246,7 @@ class ControlCharts {
 class PendulumApp {
     constructor() {
         this.physics = new PendulumPhysics();
+        this.pid = new PIDController();
 
         // Canvas要素
         this.simCanvas = document.getElementById('simCanvas');
@@ -2028,6 +2258,7 @@ class PendulumApp {
 
         // 操作状態
         this.isPaused = false;
+        this.driveMode = 'manual'; // 'manual' (手動操作) | 'auto' (PID位置制御)
         this.sliderMode = 'spring'; // 'spring' (離すと0復帰) | 'hold' (出力維持)
         this.appliedTau = 0.0;
         this.isSliderDragging = false;
@@ -2062,12 +2293,12 @@ class PendulumApp {
         this.presets = {
             default: {
                 name: '標準設定',
-                l: 1.0, m: 1.0, tauMax: 8.0, c: 0.15, g: 9.8, targetDeg: 180,
+                l: 1.0, m: 1.0, tauMax: 12.0, c: 0.15, g: 9.8, targetDeg: 180,
                 desc: '倒立振子(180°)を目指す基本構成'
             },
             pendulum90: {
                 name: '水平静止 (90°)',
-                l: 1.0, m: 1.0, tauMax: 12.0, c: 0.2, g: 9.8, targetDeg: 90,
+                l: 1.0, m: 1.0, tauMax: 15.0, c: 0.2, g: 9.8, targetDeg: 90,
                 desc: '重力に対抗して90度でキープする'
             },
             lowTorque: {
@@ -2077,17 +2308,17 @@ class PendulumApp {
             },
             heavyLong: {
                 name: '長尺・大質量',
-                l: 1.8, m: 2.5, tauMax: 20.0, c: 0.25, g: 9.8, targetDeg: 180,
+                l: 1.8, m: 2.5, tauMax: 25.0, c: 0.25, g: 9.8, targetDeg: 180,
                 desc: '大きな慣性モーメントの振子'
             },
             fastShort: {
                 name: '短尺・高速',
-                l: 0.5, m: 0.5, tauMax: 6.0, c: 0.1, g: 9.8, targetDeg: 180,
+                l: 0.5, m: 0.5, tauMax: 8.0, c: 0.1, g: 9.8, targetDeg: 180,
                 desc: '素早い反応が求められる機敏な振子'
             },
             zeroG: {
                 name: '無重力 (宇宙)',
-                l: 1.0, m: 1.0, tauMax: 4.0, c: 0.05, g: 0.0, targetDeg: 90,
+                l: 1.0, m: 1.0, tauMax: 6.0, c: 0.05, g: 0.0, targetDeg: 90,
                 desc: '重力のない空間での回転制御'
             }
         };
@@ -2099,6 +2330,7 @@ class PendulumApp {
         this.initMobileTabs();
         this.initShareModal();
         this.updateParamUIFromPhysics();
+        this.updatePIDUI();
 
         this.handleResize();
         requestAnimationFrame((t) => this.loop(t));
@@ -2119,6 +2351,22 @@ class PendulumApp {
             g: document.getElementById('param-g'),
             gVal: document.getElementById('val-g')
         };
+
+        // PIDパラメータDOM
+        this.pidInputs = {
+            kp: document.getElementById('param-kp'),
+            kpVal: document.getElementById('val-kp'),
+            ki: document.getElementById('param-ki'),
+            kiVal: document.getElementById('val-ki'),
+            kd: document.getElementById('param-kd'),
+            kdVal: document.getElementById('val-kd')
+        };
+
+        // ドライブモード切替DOM
+        this.btnDriveManual = document.getElementById('drive-manual');
+        this.btnDriveAuto = document.getElementById('drive-auto');
+        this.pidStatusBadge = document.getElementById('pid-status-badge');
+        this.manualModeToggles = document.getElementById('manual-mode-toggles');
 
         // スライダー関連DOM
         this.sliderArea = document.getElementById('torque-slider-area');
@@ -2141,25 +2389,36 @@ class PendulumApp {
     initEvents() {
         window.addEventListener('resize', () => this.handleResize());
 
+        // ドライブモード切替（Manual vs Auto）
+        this.btnDriveManual.addEventListener('click', () => {
+            this.setDriveMode('manual');
+        });
+        this.btnDriveAuto.addEventListener('click', () => {
+            this.setDriveMode('auto');
+        });
+
         // キーボード操作
         window.addEventListener('keydown', (e) => this.handleKeyDown(e));
         window.addEventListener('keyup', (e) => this.handleKeyUp(e));
 
         // ニュートラル切断ボタン
         this.btnZero.addEventListener('click', () => {
+            if (this.driveMode === 'auto') this.setDriveMode('manual');
             this.appliedTau = 0.0;
         });
 
         // 微動ボタン
         const stepVal = 0.5;
         this.btnNudgeLeft.addEventListener('click', () => {
+            if (this.driveMode === 'auto') this.setDriveMode('manual');
             this.appliedTau = Math.min(this.physics.tauMax, this.appliedTau + stepVal);
         });
         this.btnNudgeRight.addEventListener('click', () => {
+            if (this.driveMode === 'auto') this.setDriveMode('manual');
             this.appliedTau = Math.max(-this.physics.tauMax, this.appliedTau - stepVal);
         });
 
-        // スライダーモード切替（スプリング復帰 vs ホールド）
+        // スライダー復帰モード切替
         this.btnSpringMode.addEventListener('click', () => {
             this.setSliderMode('spring');
         });
@@ -2170,7 +2429,7 @@ class PendulumApp {
         // マウスホイールによる微調整
         const onWheel = (e) => {
             e.preventDefault();
-            // ホイール上回転（負）で左トルク増加、下回転（正）で右トルク増加
+            if (this.driveMode === 'auto') this.setDriveMode('manual');
             const delta = -Math.sign(e.deltaY) * (this.physics.tauMax * 0.04);
             this.appliedTau = Math.max(-this.physics.tauMax, Math.min(this.physics.tauMax, this.appliedTau + delta));
         };
@@ -2193,7 +2452,7 @@ class PendulumApp {
             this.resetSimulation();
         });
 
-        // パラメータスライダー
+        // 物理パラメータスライダー
         const setupSlider = (slider, valDisplay, key, decimals, unit = '', onChange = null) => {
             slider.addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
@@ -2213,7 +2472,34 @@ class PendulumApp {
             this.stabilized = false;
         });
 
-        // プリセットボタン
+        // PIDパラメータスライダー
+        if (this.pidInputs.kp) {
+            this.pidInputs.kp.addEventListener('input', (e) => {
+                this.pid.kp = parseFloat(e.target.value);
+                this.pidInputs.kpVal.textContent = this.pid.kp.toFixed(1);
+            });
+            this.pidInputs.ki.addEventListener('input', (e) => {
+                this.pid.ki = parseFloat(e.target.value);
+                this.pidInputs.kiVal.textContent = this.pid.ki.toFixed(1);
+            });
+            this.pidInputs.kd.addEventListener('input', (e) => {
+                this.pid.kd = parseFloat(e.target.value);
+                this.pidInputs.kdVal.textContent = this.pid.kd.toFixed(1);
+            });
+        }
+
+        // PIDプリセットボタン
+        document.querySelectorAll('.btn-pid-preset').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.pid.kp = parseFloat(btn.dataset.kp);
+                this.pid.ki = parseFloat(btn.dataset.ki);
+                this.pid.kd = parseFloat(btn.dataset.kd);
+                this.updatePIDUI();
+                this.pid.reset();
+            });
+        });
+
+        // 物理プリセットボタン
         document.querySelectorAll('.btn-preset').forEach(btn => {
             btn.addEventListener('click', () => {
                 const key = btn.dataset.preset;
@@ -2223,8 +2509,23 @@ class PendulumApp {
     }
 
     /**
+     * ドライブモード切替（Manual vs Auto）
+     */
+    setDriveMode(mode) {
+        this.driveMode = mode;
+        this.btnDriveManual.classList.toggle('active', mode === 'manual');
+        this.btnDriveAuto.classList.toggle('active', mode === 'auto');
+
+        if (mode === 'auto') {
+            this.pidStatusBadge.style.display = 'inline-flex';
+            this.pid.reset();
+        } else {
+            this.pidStatusBadge.style.display = 'none';
+        }
+    }
+
+    /**
      * インタラクティブ・アナログスライダー（タッチパドル）のイベント処理
-     * ポインターイベントを用いてマウスとタッチをシームレスに処理
      */
     initSliderEvents() {
         if (!this.sliderArea || !this.sliderTrack) return;
@@ -2234,14 +2535,16 @@ class PendulumApp {
             let p = (e.clientX - rect.left) / rect.width;
             p = Math.max(0, Math.min(1, p));
 
-            // 左端(0.0) => +1.0 (CCW 反時計回り正トルク)
-            // 中央(0.5) => 0.0
-            // 右端(1.0) => -1.0 (CW 時計回り負トルク)
             const ratio = (0.5 - p) * 2.0;
             this.appliedTau = ratio * this.physics.tauMax;
         };
 
         const onPointerDown = (e) => {
+            // スライダーを直接操作したら手動モードへ自動移行
+            if (this.driveMode === 'auto') {
+                this.setDriveMode('manual');
+            }
+
             this.isSliderDragging = true;
             this.sliderThumb.classList.add('dragging');
             try {
@@ -2281,7 +2584,7 @@ class PendulumApp {
     }
 
     /**
-     * Canvas上のおもりを指・マウスで掴んでドラッグできる操作
+     * Canvas上のおもりを指・マウスで掴んでドラッグできる操作（外乱実験にも利用可能）
      */
     initDragEvents() {
         const getCanvasCoord = (e) => {
@@ -2364,13 +2667,11 @@ class PendulumApp {
                     targetElem.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
 
-                // 描画サイズの再確認
                 this.handleResize();
                 setTimeout(() => this.handleResize(), 100);
             });
         });
 
-        // スクロール位置に応じてタブのハイライトを自動連動
         let scrollTimeout = null;
         window.addEventListener('scroll', () => {
             if (scrollTimeout) return;
@@ -2441,12 +2742,15 @@ class PendulumApp {
         if (e.target.tagName === 'INPUT') return;
 
         if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+            if (this.driveMode === 'auto') this.setDriveMode('manual');
             this.keyState.ArrowLeft = true;
             e.preventDefault();
         } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+            if (this.driveMode === 'auto') this.setDriveMode('manual');
             this.keyState.ArrowRight = true;
             e.preventDefault();
         } else if (e.code === 'Space') {
+            if (this.driveMode === 'auto') this.setDriveMode('manual');
             this.appliedTau = 0.0;
             e.preventDefault();
         } else if (e.code === 'KeyR') {
@@ -2464,52 +2768,57 @@ class PendulumApp {
     }
 
     /**
-     * トルク値の更新およびスライダー表示の同期
+     * トルク値の更新およびスライダー表示の同期（Manual & Auto PID）
      */
     updateAppliedTorque(dt) {
-        // 1. キーボード長押しによるスムーズなトルク加減算
-        if (this.keyState.ArrowLeft && !this.keyState.ArrowRight) {
-            this.keyHoldDurationLeft += dt;
-            const rate = Math.min(1.0, this.keyHoldDurationLeft / 0.3);
-            this.appliedTau = Math.min(this.physics.tauMax, this.appliedTau + this.physics.tauMax * dt * 2.2 * (0.3 + 0.7 * rate));
+        if (this.driveMode === 'auto') {
+            // Autoモード: PIDコントローラによるトルク自動算出
+            const targetRad = this.physics.targetAngleRad;
+            const currentRad = this.physics.theta;
+            const omega = this.physics.omega;
+            const tauPID = this.pid.compute(targetRad, currentRad, omega, dt, this.physics.tauMax);
+            this.appliedTau = tauPID;
         } else {
-            this.keyHoldDurationLeft = 0;
-        }
+            // Manualモード: キーボード長押しによるスムーズなトルク加減算
+            if (this.keyState.ArrowLeft && !this.keyState.ArrowRight) {
+                this.keyHoldDurationLeft += dt;
+                const rate = Math.min(1.0, this.keyHoldDurationLeft / 0.3);
+                this.appliedTau = Math.min(this.physics.tauMax, this.appliedTau + this.physics.tauMax * dt * 2.2 * (0.3 + 0.7 * rate));
+            } else {
+                this.keyHoldDurationLeft = 0;
+            }
 
-        if (this.keyState.ArrowRight && !this.keyState.ArrowLeft) {
-            this.keyHoldDurationRight += dt;
-            const rate = Math.min(1.0, this.keyHoldDurationRight / 0.3);
-            this.appliedTau = Math.max(-this.physics.tauMax, this.appliedTau - this.physics.tauMax * dt * 2.2 * (0.3 + 0.7 * rate));
-        } else {
-            this.keyHoldDurationRight = 0;
-        }
+            if (this.keyState.ArrowRight && !this.keyState.ArrowLeft) {
+                this.keyHoldDurationRight += dt;
+                const rate = Math.min(1.0, this.keyHoldDurationRight / 0.3);
+                this.appliedTau = Math.max(-this.physics.tauMax, this.appliedTau - this.physics.tauMax * dt * 2.2 * (0.3 + 0.7 * rate));
+            } else {
+                this.keyHoldDurationRight = 0;
+            }
 
-        // 2. スプリング復帰モード時の自動センタリング（離したときスッと0に戻る）
-        if (this.sliderMode === 'spring' && !this.isSliderDragging && !this.keyState.ArrowLeft && !this.keyState.ArrowRight) {
-            this.appliedTau += (0 - this.appliedTau) * Math.min(1.0, dt * 10.0);
-            if (Math.abs(this.appliedTau) < 0.005) {
-                this.appliedTau = 0.0;
+            // スプリング復帰モード時の自動センタリング（離したときスッと0に戻る）
+            if (this.sliderMode === 'spring' && !this.isSliderDragging && !this.keyState.ArrowLeft && !this.keyState.ArrowRight) {
+                this.appliedTau += (0 - this.appliedTau) * Math.min(1.0, dt * 10.0);
+                if (Math.abs(this.appliedTau) < 0.005) {
+                    this.appliedTau = 0.0;
+                }
             }
         }
 
-        // 3. スライダーUIと数値バッジの同期描画
+        // スライダーUIと数値バッジの同期描画（PID動作中もノブがリアルタイムに駆動）
         const tauMax = Math.max(0.1, this.physics.tauMax);
         const ratio = Math.max(-1.0, Math.min(1.0, this.appliedTau / tauMax));
 
-        // ノブ位置: ratio=+1(CCW・左端) => 0%, ratio=0 => 50%, ratio=-1(CW・右端) => 100%
         const thumbPosPercent = (0.5 - ratio * 0.5) * 100;
         this.sliderThumb.style.left = `${thumbPosPercent}%`;
 
-        // ゲージの塗り（中央50%から左右へ伸びる）
         if (ratio >= 0) {
-            // 左回転 (CCW: 正トルク・緑)
             const width = ratio * 50;
             this.gaugeFill.className = 'gauge-fill ccw';
             this.gaugeFill.style.left = `${50 - width}%`;
             this.gaugeFill.style.width = `${width}%`;
             this.torqueText.className = ratio > 0.01 ? 'torque-val-badge ccw' : 'torque-val-badge';
         } else {
-            // 右回転 (CW: 負トルク・赤)
             const width = Math.abs(ratio) * 50;
             this.gaugeFill.className = 'gauge-fill cw';
             this.gaugeFill.style.left = '50%';
@@ -2546,6 +2855,7 @@ class PendulumApp {
 
     resetSimulation() {
         this.physics.reset(0, 0);
+        this.pid.reset();
         this.charts.clear();
         this.appliedTau = 0.0;
         this.holdingTime = 0.0;
@@ -2585,6 +2895,18 @@ class PendulumApp {
 
         this.inputs.targetDeg.value = this.physics.targetAngleDeg;
         this.inputs.targetDegVal.textContent = this.physics.targetAngleDeg.toFixed(0) + '°';
+    }
+
+    updatePIDUI() {
+        if (!this.pidInputs.kp) return;
+        this.pidInputs.kp.value = this.pid.kp;
+        this.pidInputs.kpVal.textContent = this.pid.kp.toFixed(1);
+
+        this.pidInputs.ki.value = this.pid.ki;
+        this.pidInputs.kiVal.textContent = this.pid.ki.toFixed(1);
+
+        this.pidInputs.kd.value = this.pid.kd;
+        this.pidInputs.kdVal.textContent = this.pid.kd.toFixed(1);
     }
 
     loop(timestamp) {

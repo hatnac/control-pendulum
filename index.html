@@ -72,8 +72,22 @@
                 <canvas id="simCanvas"></canvas>
             </div>
 
-            <!-- トルク操作パネル (アナログ連続スライダー ＆ スワイプ操作) -->
+            <!-- トルク操作パネル (Manual / Auto PID ＆ アナログ連続スライダー) -->
             <div class="control-bar">
+                <!-- モード切替バー: Manual (手動) vs Auto (PID自動制御) -->
+                <div class="drive-mode-bar">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 0.85rem; font-weight: 700; color: var(--text-secondary);">モード:</span>
+                        <div class="drive-toggle-group">
+                            <button id="drive-manual" class="btn-drive active" title="人間による手動操作">🎮 Manual (手動)</button>
+                            <button id="drive-auto" class="btn-drive" title="PIDコントローラによる目標角度への自動位置制御">🤖 Auto (PID制御)</button>
+                        </div>
+                    </div>
+                    <div id="pid-status-badge" class="pid-status-badge" style="display: none;">
+                        <span class="pulse-dot"></span> PID稼働中
+                    </div>
+                </div>
+
                 <!-- ステータス ＆ 設定ヘッダー -->
                 <div class="slider-header-row">
                     <div class="slider-title-group">
@@ -83,7 +97,7 @@
 
                     <div class="slider-mode-group">
                         <button id="btn-zero" class="btn btn-sm" title="トルクを即座にゼロにします">切断 (Space)</button>
-                        <div class="mode-toggle-group">
+                        <div class="mode-toggle-group" id="manual-mode-toggles">
                             <button id="mode-spring" class="btn-mode active" title="指・マウスを離すと中央(0Nm)に戻るジョイスティック風操作">🔄 スプリング復帰</button>
                             <button id="mode-hold" class="btn-mode" title="指・マウスを離してもその出力を保持するスロットル操作">🔒 出力保持</button>
                         </div>
@@ -258,7 +272,61 @@
                 <div style="margin-top: 8px; padding: 10px; background: #0b0f19; border-radius: var(--radius-sm); border: 1px solid var(--border); font-size: 0.76rem; color: var(--text-secondary); line-height: 1.4;">
                     <strong style="color: var(--accent-yellow);">💡 制御工学の着眼点:</strong><br>
                     • 倒立振子(180°)は不安定平衡点のため、手動でピタッと止めるのは非常に困難です。<br>
-                    • 「スイングアップ必須」モードでは、最大トルクが重力最大トルク $mgl$ 未満のため、共振（エネルギー励起）を利用した制御の必要性を体感できます。
+                    • 「Auto (PID制御)」に切り替えると、PIDアルゴリズムが目標角度への安定化を自動で行います。おもりを指で引っ張って外乱を与えてみてください！
+                </div>
+            </div>
+
+            <!-- PID制御パラメータ調整カード -->
+            <div class="card pid-panel" style="grid-column: 1 / -1;">
+                <div class="card-title">
+                    <span>PID制御ゲイン調整 (Autoモード用)</span>
+                    <span style="font-size: 0.72rem; color: var(--accent-blue);">τ = Kp·e + Ki·∫e dt - Kd·ω</span>
+                </div>
+                <div class="param-grid">
+                    <!-- Kp -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">比例ゲイン (Kp)</span>
+                            <span id="val-kp" class="param-value">25.0</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-kp" type="range" min="0.0" max="60.0" step="1.0" value="25.0">
+                        </div>
+                        <span style="font-size: 0.68rem; color: var(--text-muted);">偏差に応じた基本復元力（高すぎると振動）</span>
+                    </div>
+
+                    <!-- Ki -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">積分ゲイン (Ki)</span>
+                            <span id="val-ki" class="param-value">4.0</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-ki" type="range" min="0.0" max="25.0" step="0.5" value="4.0">
+                        </div>
+                        <span style="font-size: 0.68rem; color: var(--text-muted);">重力・摩擦の定常偏差をゼロ消去</span>
+                    </div>
+
+                    <!-- Kd -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">微分ゲイン (Kd)</span>
+                            <span id="val-kd" class="param-value">6.0</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-kd" type="range" min="0.0" max="20.0" step="0.5" value="6.0">
+                        </div>
+                        <span style="font-size: 0.68rem; color: var(--text-muted);">角速度を抑える制動ブレーキ（ダンピング）</span>
+                    </div>
+                </div>
+
+                <!-- PIDゲインプリセット -->
+                <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                    <span style="font-size: 0.76rem; color: var(--text-secondary); font-weight: 700;">ゲインプリセット:</span>
+                    <button class="btn btn-sm btn-pid-preset" data-kp="25" data-ki="4" data-kd="6">1. 安定バランス (標準)</button>
+                    <button class="btn btn-sm btn-pid-preset" data-kp="20" data-ki="0" data-kd="0">2. P制御のみ (振動を観察)</button>
+                    <button class="btn btn-sm btn-pid-preset" data-kp="25" data-ki="0" data-kd="8">3. PD制御 (高制動・ダンピング)</button>
+                    <button class="btn btn-sm btn-pid-preset" data-kp="45" data-ki="6" data-kd="9">4. 高速応答 (俊敏)</button>
                 </div>
             </div>
         </section>
