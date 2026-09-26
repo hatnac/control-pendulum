@@ -275,49 +275,100 @@ canvas#simCanvas:active {
     cursor: grabbing;
 }
 
-/* トルク操作コントローラー */
+/* トルク操作コントローラー (アナログパドル ＆ スライダー) */
 .control-bar {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    padding: 12px;
+    padding: 14px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
     user-select: none;
 }
 
-.torque-meter-container {
+.slider-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.slider-title-group {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
 }
 
 .torque-meter-label {
     font-family: var(--font-mono);
-    font-size: 0.82rem;
+    font-size: 0.85rem;
+    font-weight: 700;
     color: var(--text-secondary);
-    min-width: 90px;
 }
 
-.torque-gauge-bar {
-    flex: 1;
-    height: 22px;
+.torque-val-badge {
+    background: #0b0f19;
+    border: 1px solid var(--border);
+    color: var(--accent-blue);
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    font-weight: 800;
+    padding: 4px 12px;
+    border-radius: var(--radius-sm);
+    min-width: 130px;
+    text-align: center;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+.torque-val-badge.ccw {
+    color: #34d399;
+    border-color: rgba(16, 185, 129, 0.4);
+}
+
+.torque-val-badge.cw {
+    color: #fb7185;
+    border-color: rgba(244, 63, 94, 0.4);
+}
+
+.slider-mode-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-sm {
+    padding: 5px 10px;
+    font-size: 0.78rem;
+}
+
+/* メインのタッチ・ドラッグスライダー領域 */
+.slider-touch-area {
+    padding: 8px 0;
+    cursor: pointer;
+    touch-action: none; /* スマホでのスワイプ時にブラウザスクロールをブロック */
+}
+
+.slider-track {
+    height: 42px;
     background: #0b0f19;
     border-radius: var(--radius-sm);
     position: relative;
-    overflow: hidden;
-    border: 1px solid var(--border);
+    border: 1.5px solid var(--border);
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+    overflow: visible;
 }
 
-.gauge-center-line {
+.slider-zero-line {
     position: absolute;
     left: 50%;
     top: 0;
     bottom: 0;
     width: 2px;
-    background: var(--text-muted);
+    background: #94a3b8;
     z-index: 2;
+    transform: translateX(-50%);
 }
 
 .gauge-fill {
@@ -326,65 +377,81 @@ canvas#simCanvas:active {
     bottom: 0;
     width: 0%;
     left: 50%;
-    transition: width 0.05s ease, left 0.05s ease;
     z-index: 1;
+    border-radius: 4px;
 }
 
 .gauge-fill.ccw {
-    background: linear-gradient(90deg, #059669, var(--accent-green));
+    background: linear-gradient(90deg, rgba(5, 150, 105, 0.3), #10b981);
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
 }
 
 .gauge-fill.cw {
-    background: linear-gradient(270deg, #e11d48, var(--accent-red));
+    background: linear-gradient(270deg, rgba(225, 29, 72, 0.3), #f43f5e);
+    box-shadow: 0 0 12px rgba(244, 63, 94, 0.5);
 }
 
-.torque-buttons {
+/* スライダードラッグつまみ (ノブ) */
+.slider-thumb {
+    position: absolute;
+    top: -6px;
+    bottom: -6px;
+    width: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(180deg, #f8fafc, #94a3b8);
+    border: 2px solid var(--accent-blue);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.7), 0 0 10px rgba(56, 189, 248, 0.4);
+    cursor: grab;
+    z-index: 10;
     display: flex;
-    gap: 8px;
     justify-content: center;
     align-items: center;
+    transition: transform 0.05s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.btn-motor {
-    flex: 1;
-    padding: 12px 14px;
-    font-size: 0.95rem;
-    font-weight: 700;
-    background: #1e293b;
-    border: 1px solid var(--border);
-    color: var(--text-primary);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    user-select: none;
-    transition: all 0.1s ease;
-    touch-action: manipulation;
+.slider-thumb.dragging {
+    cursor: grabbing;
+    border-color: #fef08a;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.8), 0 0 18px #eab308;
+    transform: translateX(-50%) scale(1.08);
 }
 
-.btn-motor:active, .btn-motor.active {
-    background: #334155;
-    transform: scale(0.98);
+.thumb-grip {
+    width: 4px;
+    height: 18px;
+    background: #475569;
+    border-radius: 2px;
 }
 
-.btn-motor.left-active {
-    background: rgba(16, 185, 129, 0.35);
-    border-color: var(--accent-green);
-    color: #6ee7b7;
+.slider-scale-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    margin-top: 6px;
+    padding: 0 2px;
 }
 
-.btn-motor.right-active {
-    background: rgba(244, 63, 94, 0.35);
-    border-color: var(--accent-red);
-    color: #fda4af;
-}
-
-.control-tips {
+.slider-footer-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.76rem;
-    color: var(--text-muted);
     flex-wrap: wrap;
+    gap: 8px;
+    font-size: 0.76rem;
+}
+
+.nudge-buttons {
+    display: flex;
     gap: 6px;
+}
+
+.control-hints {
+    color: var(--text-muted);
+    font-size: 0.75rem;
 }
 
 kbd {
@@ -585,25 +652,33 @@ input[type="range"] {
 
     /* シミュレータ画面のスマホ最適化 */
     .canvas-wrapper {
-        height: 52vh;
-        min-height: 280px;
-        max-height: 440px;
+        height: 48vh;
+        min-height: 260px;
+        max-height: 400px;
     }
 
-    .btn-motor {
-        padding: 14px 10px;
-        font-size: 1.05rem;
+    .slider-track {
+        height: 46px;
     }
 
-    .torque-meter-label {
-        font-size: 0.78rem;
-        min-width: 75px;
+    .slider-thumb {
+        width: 38px;
+        top: -4px;
+        bottom: -4px;
     }
 
-    .control-tips {
+    .slider-footer-row {
         flex-direction: column;
-        align-items: flex-start;
-        gap: 6px;
+        align-items: stretch;
+    }
+
+    .nudge-buttons {
+        width: 100%;
+    }
+
+    .nudge-buttons .btn {
+        flex: 1;
+        padding: 8px;
     }
 
     /* グラフセクションのスマホ最適化 */

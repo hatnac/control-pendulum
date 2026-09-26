@@ -72,33 +72,52 @@
                 <canvas id="simCanvas"></canvas>
             </div>
 
-            <!-- トルク操作パネル -->
+            <!-- トルク操作パネル (アナログ連続スライダー ＆ スワイプ操作) -->
             <div class="control-bar">
-                <div class="torque-meter-container">
-                    <span class="torque-meter-label">モータ出力:</span>
-                    <div class="torque-gauge-bar">
-                        <div class="gauge-center-line"></div>
-                        <div id="gauge-fill" class="gauge-fill"></div>
+                <!-- ステータス ＆ 設定ヘッダー -->
+                <div class="slider-header-row">
+                    <div class="slider-title-group">
+                        <span class="torque-meter-label">モータ出力:</span>
+                        <span id="torque-val-text" class="torque-val-badge">0.00 Nm (0%)</span>
                     </div>
-                    <span id="torque-val-text" class="torque-meter-label" style="text-align: right; min-width: 125px;">0.00 Nm (0%)</span>
-                </div>
 
-                <div class="torque-buttons">
-                    <button id="btn-left" class="btn-motor">◀ 左回転 (← / A)</button>
-                    <button id="btn-zero" class="btn" style="padding: 12px 14px;" title="トルクを0にする">切断 (Space)</button>
-                    <button id="btn-right" class="btn-motor">右回転 (→ / D) ▶</button>
-                </div>
-
-                <div class="control-tips">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <span>操作モード:</span>
+                    <div class="slider-mode-group">
+                        <button id="btn-zero" class="btn btn-sm" title="トルクを即座にゼロにします">切断 (Space)</button>
                         <div class="mode-toggle-group">
-                            <button id="mode-momentary" class="btn-mode active">押しっぱなし</button>
-                            <button id="mode-throttle" class="btn-mode">スロットル</button>
+                            <button id="mode-spring" class="btn-mode active" title="指・マウスを離すと中央(0Nm)に戻るジョイスティック風操作">🔄 スプリング復帰</button>
+                            <button id="mode-hold" class="btn-mode" title="指・マウスを離してもその出力を保持するスロットル操作">🔒 出力保持</button>
                         </div>
                     </div>
-                    <div>
-                        <kbd>←</kbd> <kbd>→</kbd> トルク操作 / <kbd>Space</kbd> ニュートラル / <kbd>R</kbd> リセット
+                </div>
+
+                <!-- メイン: インタラクティブ・アナログパドル（ドラッグ・スワイプ領域） -->
+                <div class="slider-touch-area" id="torque-slider-area" title="マウスドラッグまたは指スワイプで連続的にトルクを調整できます">
+                    <div class="slider-track" id="torque-slider-track">
+                        <div class="slider-zero-line"></div>
+                        <div id="gauge-fill" class="gauge-fill"></div>
+                        <div id="torque-slider-thumb" class="slider-thumb">
+                            <div class="thumb-grip"></div>
+                        </div>
+                    </div>
+
+                    <!-- スケール目盛り -->
+                    <div class="slider-scale-labels">
+                        <span>◀ CCW (-100%)</span>
+                        <span>-50%</span>
+                        <span style="color: var(--text-primary); font-weight: 700;">0 (停止)</span>
+                        <span>+50%</span>
+                        <span>CW (+100%) ▶</span>
+                    </div>
+                </div>
+
+                <!-- 補助ボタン & ヒント -->
+                <div class="slider-footer-row">
+                    <div class="nudge-buttons">
+                        <button id="btn-nudge-left" class="btn btn-sm" title="少し左回転トルクを増やす">◀ 微動 (-0.5Nm)</button>
+                        <button id="btn-nudge-right" class="btn btn-sm" title="少し右回転トルクを増やす">微動 (+0.5Nm) ▶</button>
+                    </div>
+                    <div class="control-hints">
+                        💡 <b>スワイプ / ドラッグ</b>で無段階調整 | <b>マウスホイール</b>で微調整 | <b>[←] [→]</b> スムーズ加速
                     </div>
                 </div>
             </div>

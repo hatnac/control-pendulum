@@ -1,5 +1,6 @@
 /**
- * app.js - メインアプリケーション制御・イベントハンドリング・ゲームループ（モバイル＆タッチ対応）
+ * app.js - メインアプリケーション制御・イベントハンドリング・ゲームループ
+ * （アナログスライダー、スワイプ操作、マウスドラッグ、キーボード加速対応）
  */
 
 import { PendulumPhysics } from './physics.js';
@@ -20,16 +21,20 @@ class PendulumApp {
 
         // 操作状態
         this.isPaused = false;
-        this.controlMode = 'momentary'; // 'momentary' | 'throttle'
+        this.sliderMode = 'spring'; // 'spring' (離すと0復帰) | 'hold' (出力維持)
         this.appliedTau = 0.0;
+        this.isSliderDragging = false;
+
         this.keyState = {
             ArrowLeft: false,
             ArrowRight: false,
             KeyA: false,
             KeyD: false
         };
+        this.keyHoldDurationLeft = 0;
+        this.keyHoldDurationRight = 0;
 
-        // タッチ＆マウスドラッグ状態
+        // 振子おもりのタッチ＆マウスドラッグ状態
         this.isDragging = false;
         this.dragLastAngle = 0;
         this.dragLastTime = 0;
@@ -82,6 +87,7 @@ class PendulumApp {
 
         this.initDOM();
         this.initEvents();
+        this.initSliderEvents();
         this.initDragEvents();
         this.initMobileTabs();
         this.initShareModal();
@@ -107,17 +113,22 @@ class PendulumApp {
             gVal: document.getElementById('val-g')
         };
 
+        // スライダー関連DOM
+        this.sliderArea = document.getElementById('torque-slider-area');
+        this.sliderTrack = document.getElementById('torque-slider-track');
+        this.sliderThumb = document.getElementById('torque-slider-thumb');
         this.gaugeFill = document.getElementById('gauge-fill');
         this.torqueText = document.getElementById('torque-val-text');
 
-        this.btnLeft = document.getElementById('btn-left');
-        this.btnRight = document.getElementById('btn-right');
+        this.btnSpringMode = document.getElementById('mode-spring');
+        this.btnHoldMode = document.getElementById('mode-hold');
+
+        this.btnNudgeLeft = document.getElementById('btn-nudge-left');
+        this.btnNudgeRight = document.getElementById('btn-nudge-right');
         this.btnZero = document.getElementById('btn-zero');
+
         this.btnReset = document.getElementById('btn-reset');
         this.btnPause = document.getElementById('btn-pause');
-
-        this.btnModeMomentary = document.getElementById('mode-momentary');
-        this.btnModeThrottle = document.getElementById('mode-throttle');
     }
 
     initEvents() {
@@ -127,56 +138,52 @@ class PendulumApp {
         window.addEventListener('keydown', (e) => this.handleKeyDown(e));
         window.addEventListener('keyup', (e) => this.handleKeyUp(e));
 
-        // トルクボタン（マウス/タッチ共通バインド）
-        const bindHoldButton = (btn, dir) => {
-            const start = (ev) => {
-                if (ev.cancelable) ev.preventDefault();
-                if (this.controlMode === 'momentary') {
-                    if (dir === 'left') this.keyState.ArrowLeft = true;
-                    if (dir === 'right') this.keyState.ArrowRight = true;
-                } else {
-                    const step = this.physics.tauMax * 0.15;
-                    this.appliedTau += (dir === 'left' ? step : -step);
-                    this.appliedTau = Math.max(-this.physics.tauMax, Math.min(this.physics.tauMax, this.appliedTau));
-                }
-            };
-            const end = (ev) => {
-                if (ev.cancelable) ev.preventDefault();
-                if (this.controlMode === 'momentary') {
-                    if (dir === 'left') this.keyState.ArrowLeft = false;
-                    if (dir === 'right') this.keyState.ArrowRight = false;
-                }
-            };
-
-            btn.addEventListener('mousedown', start);
-            btn.addEventListener('mouseup', end);
-            btn.addEventListener('mouseleave', end);
-            btn.addEventListener('touchstart', start, { passive: false });
-            btn.addEventListener('touchend', end, { passive: false });
-            btn.addEventListener('touchcancel', end, { passive: false });
-        };
-
-        bindHoldButton(this.btnLeft, 'left');
-        bindHoldButton(this.btnRight, 'right');
-
+        // ニュートラル切断ボタン
         this.btnZero.addEventListener('click', () => {
             this.appliedTau = 0.0;
         });
 
-        this.btnReset.addEventListener('click', () => {
-            this.resetSimulation();
+        // 微動ボタン
+        const stepVal = 0.5;
+        this.btnNudgeLeft.addEventListener('click', () => {
+            this.appliedTau = Math.min(this.physics.tauMax, this.appliedTau + stepVal);
+        });
+        this.btnNudgeRight.addEventListener('click', () => {
+            this.appliedTau = Math.max(-this.physics.tauMax, this.appliedTau - stepVal);
         });
 
+        // スライダーモード切替（スプリング復帰 vs ホールド）
+        this.btnSpringMode.addEventListener('click', () => {
+            this.setSliderMode('spring');
+        });
+        this.btnHoldMode.addEventListener('click', () => {
+            this.setSliderMode('hold');
+        });
+
+        // マウスホイールによる微調整
+        const onWheel = (e) => {
+            e.preventDefault();
+            // ホイール上回転（負）で左トルク増加、下回転（正）で右トルク増加
+            const delta = -Math.sign(e.deltaY) * (this.physics.tauMax * 0.04);
+            this.appliedTau = Math.max(-this.physics.tauMax, Math.min(this.physics.tauMax, this.appliedTau + delta));
+        };
+
+        if (this.sliderArea) {
+            this.sliderArea.addEventListener('wheel', onWheel, { passive: false });
+        }
+        if (this.simCanvas) {
+            this.simCanvas.addEventListener('wheel', onWheel, { passive: false });
+        }
+
+        // シミュレーション一時停止 / 再開
         this.btnPause.addEventListener('click', () => {
             this.isPaused = !this.isPaused;
             this.btnPause.textContent = this.isPaused ? '▶ 再開' : '⏸ 一時停止';
         });
 
-        this.btnModeMomentary.addEventListener('click', () => {
-            this.setControlMode('momentary');
-        });
-        this.btnModeThrottle.addEventListener('click', () => {
-            this.setControlMode('throttle');
+        // リセット
+        this.btnReset.addEventListener('click', () => {
+            this.resetSimulation();
         });
 
         // パラメータスライダー
@@ -209,7 +216,65 @@ class PendulumApp {
     }
 
     /**
-     * Canvas上のおもりを指・マウスで掴んでドラッグできる操作を実装
+     * インタラクティブ・アナログスライダー（タッチパドル）のイベント処理
+     * ポインターイベントを用いてマウスとタッチをシームレスに処理
+     */
+    initSliderEvents() {
+        if (!this.sliderArea || !this.sliderTrack) return;
+
+        const updateFromPointer = (e) => {
+            const rect = this.sliderTrack.getBoundingClientRect();
+            let p = (e.clientX - rect.left) / rect.width;
+            p = Math.max(0, Math.min(1, p));
+
+            // 左端(0.0) => +1.0 (CCW 反時計回り正トルク)
+            // 中央(0.5) => 0.0
+            // 右端(1.0) => -1.0 (CW 時計回り負トルク)
+            const ratio = (0.5 - p) * 2.0;
+            this.appliedTau = ratio * this.physics.tauMax;
+        };
+
+        const onPointerDown = (e) => {
+            this.isSliderDragging = true;
+            this.sliderThumb.classList.add('dragging');
+            try {
+                this.sliderArea.setPointerCapture(e.pointerId);
+            } catch (err) {}
+            updateFromPointer(e);
+            e.preventDefault();
+        };
+
+        const onPointerMove = (e) => {
+            if (!this.isSliderDragging) return;
+            updateFromPointer(e);
+            e.preventDefault();
+        };
+
+        const onPointerUp = (e) => {
+            if (this.isSliderDragging) {
+                this.isSliderDragging = false;
+                this.sliderThumb.classList.remove('dragging');
+                try {
+                    this.sliderArea.releasePointerCapture(e.pointerId);
+                } catch (err) {}
+                e.preventDefault();
+            }
+        };
+
+        this.sliderArea.addEventListener('pointerdown', onPointerDown);
+        this.sliderArea.addEventListener('pointermove', onPointerMove);
+        this.sliderArea.addEventListener('pointerup', onPointerUp);
+        this.sliderArea.addEventListener('pointercancel', onPointerUp);
+    }
+
+    setSliderMode(mode) {
+        this.sliderMode = mode;
+        this.btnSpringMode.classList.toggle('active', mode === 'spring');
+        this.btnHoldMode.classList.toggle('active', mode === 'hold');
+    }
+
+    /**
+     * Canvas上のおもりを指・マウスで掴んでドラッグできる操作
      */
     initDragEvents() {
         const getCanvasCoord = (e) => {
@@ -226,8 +291,7 @@ class PendulumApp {
             const pos = getCanvasCoord(e);
             const bobInfo = this.renderer.getBobPosition(this.physics);
 
-            // おもり判定（指で触りやすいように当たり判定半径を広めに）
-            const hitRadius = Math.max(30, bobInfo.radius * 1.8);
+            const hitRadius = Math.max(32, bobInfo.radius * 2.0);
             const dist = Math.hypot(pos.x - bobInfo.x, pos.y - bobInfo.y);
 
             if (dist <= hitRadius) {
@@ -245,18 +309,13 @@ class PendulumApp {
             const pos = getCanvasCoord(e);
             const metrics = this.renderer.getLayoutMetrics(this.physics);
 
-            // 支点(pivotX, pivotY)からタッチ位置へのベクトル
             const dx = pos.x - metrics.pivotX;
             const dy = pos.y - metrics.pivotY;
 
-            // 角度計算: dx = L sin(θ), dy = L cos(θ) => θ = atan2(dx, dy)
             const targetTheta = Math.atan2(dx, dy);
-
-            // 連続的な回転を追従
             const diff = PendulumPhysics.normalizeAngle(targetTheta - this.physics.theta);
             this.physics.theta += diff;
 
-            // 速度の推定
             const now = performance.now();
             const dt = (now - this.dragLastTime) / 1000.0;
             if (dt > 0.005) {
@@ -269,7 +328,6 @@ class PendulumApp {
         const onEnd = (e) => {
             if (this.isDragging) {
                 this.isDragging = false;
-                // 角速度の上限リミット（異常なフリックによる吹き飛びを防止）
                 this.physics.omega = Math.max(-20, Math.min(20, this.physics.omega));
                 if (e.cancelable) e.preventDefault();
             }
@@ -285,9 +343,6 @@ class PendulumApp {
         window.addEventListener('touchcancel', onEnd, { passive: false });
     }
 
-    /**
-     * モバイル用タブナビゲーションの初期化
-     */
     initMobileTabs() {
         const tabBtns = document.querySelectorAll('.mobile-tab-btn');
         if (!tabBtns.length) return;
@@ -301,15 +356,11 @@ class PendulumApp {
                     sec.classList.toggle('tab-active', sec.id === `tab-${targetTab}`);
                 });
 
-                // 表示切り替え後の再リサイズ
                 setTimeout(() => this.handleResize(), 50);
             });
         });
     }
 
-    /**
-     * スマホ共有用QRコードモーダルの初期化
-     */
     initShareModal() {
         const btnShare = document.getElementById('btn-share-mobile');
         const modal = document.getElementById('qr-modal');
@@ -321,15 +372,12 @@ class PendulumApp {
         if (!btnShare || !modal) return;
 
         const openModal = () => {
-            // 現在のアクセスURL（もしfile://ならローカルサーバー案内）
             let currentUrl = window.location.href;
             if (currentUrl.startsWith('file://')) {
-                // fileプロトコルの場合はローカルサーバーまたはヒント表示
                 currentUrl = 'http://localhost:8000';
             }
 
             urlInput.value = currentUrl;
-            // 無料QRコード生成APIを利用して即時QR生成
             qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=8&data=${encodeURIComponent(currentUrl)}`;
 
             modal.style.display = 'flex';
@@ -355,13 +403,6 @@ class PendulumApp {
         });
     }
 
-    setControlMode(mode) {
-        this.controlMode = mode;
-        this.btnModeMomentary.classList.toggle('active', mode === 'momentary');
-        this.btnModeThrottle.classList.toggle('active', mode === 'throttle');
-        this.appliedTau = 0.0;
-    }
-
     handleResize() {
         this.renderer.resize();
         this.charts.resize();
@@ -372,15 +413,9 @@ class PendulumApp {
 
         if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
             this.keyState.ArrowLeft = true;
-            if (this.controlMode === 'throttle') {
-                this.appliedTau = Math.min(this.physics.tauMax, this.appliedTau + this.physics.tauMax * 0.1);
-            }
             e.preventDefault();
         } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
             this.keyState.ArrowRight = true;
-            if (this.controlMode === 'throttle') {
-                this.appliedTau = Math.max(-this.physics.tauMax, this.appliedTau - this.physics.tauMax * 0.1);
-            }
             e.preventDefault();
         } else if (e.code === 'Space') {
             this.appliedTau = 0.0;
@@ -399,41 +434,62 @@ class PendulumApp {
         }
     }
 
+    /**
+     * トルク値の更新およびスライダー表示の同期
+     */
     updateAppliedTorque(dt) {
-        if (this.controlMode === 'momentary') {
-            const left = this.keyState.ArrowLeft;
-            const right = this.keyState.ArrowRight;
-
-            if (left && !right) {
-                this.appliedTau = this.physics.tauMax;
-                this.btnLeft.classList.add('left-active');
-                this.btnRight.classList.remove('right-active');
-            } else if (right && !left) {
-                this.appliedTau = -this.physics.tauMax;
-                this.btnRight.classList.add('right-active');
-                this.btnLeft.classList.remove('left-active');
-            } else {
-                this.appliedTau = 0.0;
-                this.btnLeft.classList.remove('left-active');
-                this.btnRight.classList.remove('right-active');
-            }
+        // 1. キーボード長押しによるスムーズなトルク加減算
+        if (this.keyState.ArrowLeft && !this.keyState.ArrowRight) {
+            this.keyHoldDurationLeft += dt;
+            const rate = Math.min(1.0, this.keyHoldDurationLeft / 0.3);
+            this.appliedTau = Math.min(this.physics.tauMax, this.appliedTau + this.physics.tauMax * dt * 2.2 * (0.3 + 0.7 * rate));
         } else {
-            this.btnLeft.classList.toggle('left-active', this.appliedTau > 0.05);
-            this.btnRight.classList.toggle('right-active', this.appliedTau < -0.05);
+            this.keyHoldDurationLeft = 0;
         }
 
-        const ratio = this.appliedTau / this.physics.tauMax;
-        if (ratio >= 0) {
-            this.gaugeFill.className = 'gauge-fill ccw';
-            this.gaugeFill.style.left = '50%';
-            this.gaugeFill.style.width = `${ratio * 50}%`;
+        if (this.keyState.ArrowRight && !this.keyState.ArrowLeft) {
+            this.keyHoldDurationRight += dt;
+            const rate = Math.min(1.0, this.keyHoldDurationRight / 0.3);
+            this.appliedTau = Math.max(-this.physics.tauMax, this.appliedTau - this.physics.tauMax * dt * 2.2 * (0.3 + 0.7 * rate));
         } else {
-            const width = Math.abs(ratio) * 50;
-            this.gaugeFill.className = 'gauge-fill cw';
+            this.keyHoldDurationRight = 0;
+        }
+
+        // 2. スプリング復帰モード時の自動センタリング（離したときスッと0に戻る）
+        if (this.sliderMode === 'spring' && !this.isSliderDragging && !this.keyState.ArrowLeft && !this.keyState.ArrowRight) {
+            this.appliedTau += (0 - this.appliedTau) * Math.min(1.0, dt * 10.0);
+            if (Math.abs(this.appliedTau) < 0.005) {
+                this.appliedTau = 0.0;
+            }
+        }
+
+        // 3. スライダーUIと数値バッジの同期描画
+        const tauMax = Math.max(0.1, this.physics.tauMax);
+        const ratio = Math.max(-1.0, Math.min(1.0, this.appliedTau / tauMax));
+
+        // ノブ位置: ratio=+1(CCW・左端) => 0%, ratio=0 => 50%, ratio=-1(CW・右端) => 100%
+        const thumbPosPercent = (0.5 - ratio * 0.5) * 100;
+        this.sliderThumb.style.left = `${thumbPosPercent}%`;
+
+        // ゲージの塗り（中央50%から左右へ伸びる）
+        if (ratio >= 0) {
+            // 左回転 (CCW: 正トルク・緑)
+            const width = ratio * 50;
+            this.gaugeFill.className = 'gauge-fill ccw';
             this.gaugeFill.style.left = `${50 - width}%`;
             this.gaugeFill.style.width = `${width}%`;
+            this.torqueText.className = ratio > 0.01 ? 'torque-val-badge ccw' : 'torque-val-badge';
+        } else {
+            // 右回転 (CW: 負トルク・赤)
+            const width = Math.abs(ratio) * 50;
+            this.gaugeFill.className = 'gauge-fill cw';
+            this.gaugeFill.style.left = '50%';
+            this.gaugeFill.style.width = `${width}%`;
+            this.torqueText.className = 'torque-val-badge cw';
         }
-        this.torqueText.textContent = `${this.appliedTau.toFixed(2)} Nm (${(ratio * 100).toFixed(0)}%)`;
+
+        const sign = this.appliedTau > 0 ? '+' : '';
+        this.torqueText.textContent = `${sign}${this.appliedTau.toFixed(2)} Nm (${sign}${(ratio * 100).toFixed(0)}%)`;
     }
 
     updateStabilization(dt) {
@@ -511,7 +567,6 @@ class PendulumApp {
         if (!this.isPaused && dt > 0) {
             this.updateAppliedTorque(dt);
 
-            // ドラッグ中でなければ物理シミュレーションを更新
             if (!this.isDragging) {
                 this.physics.update(dt, this.appliedTau);
             }
