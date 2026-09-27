@@ -59,6 +59,57 @@ header {
     z-index: 100;
 }
 
+/* システム切替バー（ヘッダー直下） */
+.system-selector-bar {
+    background: #0b0f19;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    padding: 8px 16px;
+    position: sticky;
+    top: 53px;
+    z-index: 90;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.sys-btn {
+    flex: 1;
+    max-width: 260px;
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    padding: 8px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    user-select: none;
+}
+
+.sys-btn:hover {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border-color: var(--border-highlight);
+}
+
+.sys-btn.active {
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.25), rgba(14, 165, 233, 0.15));
+    color: #38bdf8;
+    border-color: #38bdf8;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+    font-weight: 700;
+}
+
+.sys-icon {
+    font-size: 1.05rem;
+}
+
 .logo-container {
     display: flex;
     align-items: center;
@@ -706,6 +757,18 @@ input[type="range"] {
         font-size: 1.0rem;
     }
 
+    .system-selector-bar {
+        padding: 5px 8px;
+        gap: 6px;
+        top: 0;
+        position: relative;
+    }
+
+    .sys-btn {
+        padding: 6px 10px;
+        font-size: 0.8rem;
+    }
+
     .mobile-nav-tabs {
         display: flex;
         position: sticky;
@@ -725,7 +788,7 @@ input[type="range"] {
     /* スマホでも全セクションを常時表示（サイズ0pxバグを根本解決） */
     .tab-section {
         display: flex !important;
-        scroll-margin-top: 55px;
+        scroll-margin-top: 50px;
     }
 
     /* シミュレータ画面のスマホ最適化 */

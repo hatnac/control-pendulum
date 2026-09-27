@@ -13,7 +13,7 @@
     <header>
         <div class="logo-container">
             <span class="logo-badge">CONTROL ENG</span>
-            <h1>振子モータ制御</h1>
+            <h1 id="app-header-title">制御工学シミュレータ</h1>
         </div>
         <div class="header-actions">
             <button id="btn-share-mobile" class="btn" title="スマホでアクセスするためのQRコードを表示">📱 スマホ共有</button>
@@ -21,6 +21,18 @@
             <button id="btn-reset" class="btn btn-danger">↺ リセット</button>
         </div>
     </header>
+
+    <!-- システム切替バー（振子モータ制御 ⇔ マス・バネ・ダンパー系） -->
+    <div class="system-selector-bar">
+        <button id="btn-sys-pendulum" class="sys-btn active" title="回転振子モータ制御系">
+            <span class="sys-icon">🔄</span>
+            <span class="sys-title">振子モータ制御系</span>
+        </button>
+        <button id="btn-sys-msd" class="sys-btn" title="マス・バネ・ダンパー位置制御系">
+            <span class="sys-icon">⏹️</span>
+            <span class="sys-title">マス・バネ・ダンパー系</span>
+        </button>
+    </div>
 
     <!-- スマホ接続用QRコードモーダル -->
     <div id="qr-modal" class="modal-backdrop" style="display: none;">
@@ -53,17 +65,17 @@
 
     <!-- モバイル用ナビゲーションタブ（スマホ画面で表示） -->
     <nav class="mobile-nav-tabs">
-        <button class="mobile-tab-btn active" data-tab="sim">🎮 振子操作</button>
+        <button class="mobile-tab-btn active" data-tab="sim">🎮 操作画面</button>
         <button class="mobile-tab-btn" data-tab="charts">📈 応答グラフ</button>
         <button class="mobile-tab-btn" data-tab="settings">⚙️ 設定</button>
     </nav>
 
     <!-- メインコンテンツ -->
     <main class="app-container">
-        <!-- セクション 1: 振子シミュレータ本体 -->
+        <!-- セクション 1: シミュレータ本体 -->
         <section id="tab-sim" class="card sim-section tab-section tab-active">
             <div class="card-title">
-                <span>振子シミュレーション (360°回転)</span>
+                <span id="sim-title-text">振子シミュレーション (360°回転)</span>
                 <span style="font-size: 0.75rem; color: var(--accent-yellow);">☝️ 指・マウスで掴んで動かせます</span>
             </div>
 
@@ -72,7 +84,7 @@
                 <canvas id="simCanvas"></canvas>
             </div>
 
-            <!-- トルク操作パネル (Manual / Auto PID ＆ アナログ連続スライダー) -->
+            <!-- 操作パネル (Manual / Auto PID ＆ アナログ連続スライダー) -->
             <div class="control-bar">
                 <!-- モード切替バー: Manual (手動) vs Auto (PID自動制御) -->
                 <div class="drive-mode-bar">
@@ -80,7 +92,7 @@
                         <span style="font-size: 0.85rem; font-weight: 700; color: var(--text-secondary);">モード:</span>
                         <div class="drive-toggle-group">
                             <button id="drive-manual" class="btn-drive active" title="人間による手動操作">🎮 Manual (手動)</button>
-                            <button id="drive-auto" class="btn-drive" title="PIDコントローラによる目標角度への自動位置制御">🤖 Auto (PID制御)</button>
+                            <button id="drive-auto" class="btn-drive" title="PIDコントローラによる目標値への自動位置制御">🤖 Auto (PID制御)</button>
                         </div>
                     </div>
                     <div id="pid-status-badge" class="pid-status-badge" style="display: none;">
@@ -91,21 +103,21 @@
                 <!-- ステータス ＆ 設定ヘッダー -->
                 <div class="slider-header-row">
                     <div class="slider-title-group">
-                        <span class="torque-meter-label">モータ出力:</span>
+                        <span id="control-input-label" class="torque-meter-label">モータ出力:</span>
                         <span id="torque-val-text" class="torque-val-badge">0.00 Nm (0%)</span>
                     </div>
 
                     <div class="slider-mode-group">
-                        <button id="btn-zero" class="btn btn-sm" title="トルクを即座にゼロにします">切断 (Space)</button>
+                        <button id="btn-zero" class="btn btn-sm" title="出力を即座にゼロにします">ゼロ復帰 (Space)</button>
                         <div class="mode-toggle-group" id="manual-mode-toggles">
-                            <button id="mode-spring" class="btn-mode active" title="指・マウスを離すと中央(0Nm)に戻るジョイスティック風操作">🔄 スプリング復帰</button>
+                            <button id="mode-spring" class="btn-mode active" title="指・マウスを離すと中央(0)に戻るジョイスティック風操作">🔄 スプリング復帰</button>
                             <button id="mode-hold" class="btn-mode" title="指・マウスを離してもその出力を保持するスロットル操作">🔒 出力保持</button>
                         </div>
                     </div>
                 </div>
 
                 <!-- メイン: インタラクティブ・アナログパドル（ドラッグ・スワイプ領域） -->
-                <div class="slider-touch-area" id="torque-slider-area" title="マウスドラッグまたは指スワイプで連続的にトルクを調整できます">
+                <div class="slider-touch-area" id="torque-slider-area" title="マウスドラッグまたは指スワイプで連続的に出力を調整できます">
                     <div class="slider-track" id="torque-slider-track">
                         <div class="slider-zero-line"></div>
                         <div id="gauge-fill" class="gauge-fill"></div>
@@ -115,20 +127,20 @@
                     </div>
 
                     <!-- スケール目盛り -->
-                    <div class="slider-scale-labels">
-                        <span>◀ CCW (-100%)</span>
-                        <span>-50%</span>
+                    <div class="slider-scale-labels" id="slider-scale-labels">
+                        <span id="scale-min-label">◀ CCW (-100%)</span>
+                        <span id="scale-mid-left">-50%</span>
                         <span style="color: var(--text-primary); font-weight: 700;">0 (停止)</span>
-                        <span>+50%</span>
-                        <span>CW (+100%) ▶</span>
+                        <span id="scale-mid-right">+50%</span>
+                        <span id="scale-max-label">CW (+100%) ▶</span>
                     </div>
                 </div>
 
                 <!-- 補助ボタン & ヒント -->
                 <div class="slider-footer-row">
                     <div class="nudge-buttons">
-                        <button id="btn-nudge-left" class="btn btn-sm" title="少し左回転トルクを増やす">◀ 微動 (-0.5Nm)</button>
-                        <button id="btn-nudge-right" class="btn btn-sm" title="少し右回転トルクを増やす">微動 (+0.5Nm) ▶</button>
+                        <button id="btn-nudge-left" class="btn btn-sm" title="出力を左/引張方向に増やす">◀ 微動 (-)</button>
+                        <button id="btn-nudge-right" class="btn btn-sm" title="出力を右/押出方向に増やす">微動 (+) ▶</button>
                     </div>
                     <div class="control-hints">
                         💡 <b>スワイプ / ドラッグ</b>で無段階調整 | <b>マウスホイール</b>で微調整 | <b>[←] [→]</b> スムーズ加速
@@ -141,8 +153,8 @@
         <section id="tab-charts" class="card charts-section tab-section">
             <div class="chart-box">
                 <div class="card-title">
-                    <span>時系列応答 (Time History)</span>
-                    <span style="font-size: 0.72rem; color: var(--text-muted);">θ・θ_ref・τ</span>
+                    <span id="time-chart-title">時系列応答 (Time History)</span>
+                    <span id="time-chart-sub" style="font-size: 0.72rem; color: var(--text-muted);">θ・θ_ref・τ</span>
                 </div>
                 <div class="chart-canvas-wrapper">
                     <canvas id="timeCanvas"></canvas>
@@ -151,8 +163,8 @@
 
             <div class="chart-box">
                 <div class="card-title">
-                    <span>相平面プロット (Phase Plane: θ vs ω)</span>
-                    <span style="font-size: 0.72rem; color: var(--text-muted);">平衡点と状態軌跡</span>
+                    <span id="phase-chart-title">相平面プロット (Phase Plane)</span>
+                    <span id="phase-chart-sub" style="font-size: 0.72rem; color: var(--text-muted);">平衡点と状態軌跡</span>
                 </div>
                 <div class="chart-canvas-wrapper">
                     <canvas id="phaseCanvas"></canvas>
@@ -162,10 +174,10 @@
 
         <!-- セクション 3: パラメータ設定 & プリセット & 解説 -->
         <section id="tab-settings" class="settings-section tab-section">
-            <!-- パラメータ変更スライダー -->
-            <div class="card">
+            <!-- 振子用パラメータ調整カード -->
+            <div id="card-pendulum-params" class="card">
                 <div class="card-title">
-                    <span>物理・制御パラメータ調整</span>
+                    <span>振子 物理パラメータ調整</span>
                     <span style="font-size: 0.72rem; color: var(--text-muted);">リアルタイム反映</span>
                 </div>
                 <div class="param-grid">
@@ -237,10 +249,84 @@
                 </div>
             </div>
 
-            <!-- プリセット & 制御工学ヒント -->
-            <div class="card preset-panel">
+            <!-- マス・バネ・ダンパー系用パラメータ調整カード -->
+            <div id="card-msd-params" class="card" style="display: none;">
                 <div class="card-title">
-                    <span>学習プリセット</span>
+                    <span>マス・バネ・ダンパー 物理パラメータ調整</span>
+                    <span style="font-size: 0.72rem; color: var(--accent-blue);">mẍ + Dẋ + Kx = F</span>
+                </div>
+                <div class="param-grid">
+                    <!-- 質量 m -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">マスの質量 (m)</span>
+                            <span id="val-msd-m" class="param-value">1.00 kg</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-msd-m" type="range" min="0.2" max="5.0" step="0.1" value="1.0">
+                        </div>
+                    </div>
+
+                    <!-- ばね定数 K -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">ばね定数 (K)</span>
+                            <span id="val-msd-k" class="param-value">12.0 N/m</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-msd-k" type="range" min="1.0" max="40.0" step="0.5" value="12.0">
+                        </div>
+                    </div>
+
+                    <!-- 減衰係数 D -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">減衰係数 (D)</span>
+                            <span id="val-msd-d" class="param-value">1.20 Ns/m</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-msd-d" type="range" min="0.0" max="15.0" step="0.1" value="1.2">
+                        </div>
+                    </div>
+
+                    <!-- 最大外力 F_max -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">最大入力外力 (F_max)</span>
+                            <span id="val-msd-fMax" class="param-value">20.0 N</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-msd-fMax" type="range" min="5.0" max="50.0" step="1.0" value="20.0">
+                        </div>
+                    </div>
+
+                    <!-- 目標位置 x_target -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">目標変位 (x_ref)</span>
+                            <span id="val-msd-targetX" class="param-value">+0.50 m</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-msd-targetX" type="range" min="-0.8" max="1.0" step="0.05" value="0.5">
+                        </div>
+                    </div>
+
+                    <!-- 系の特性（固有角周波数 ωn & 減衰比 ζ） -->
+                    <div class="param-item" style="background: #0b0f19; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px;">
+                        <span class="param-name" style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-bottom: 4px;">2次系の動特性</span>
+                        <div style="font-family: var(--font-mono); font-size: 0.8rem; line-height: 1.5;">
+                            <div>固有ωn : <b id="calc-msd-wn" style="color: var(--accent-blue);">3.46</b> rad/s</div>
+                            <div>減衰比 ζ : <b id="calc-msd-zeta" style="color: var(--accent-yellow);">0.17</b></div>
+                            <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 2px;">特性: <span id="calc-msd-damping" style="font-weight: 700; color: #38bdf8;">不足減衰 (振動的)</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 振子用プリセットパネル -->
+            <div id="card-pendulum-presets" class="card preset-panel">
+                <div class="card-title">
+                    <span>振子 学習プリセット</span>
                 </div>
                 <div class="preset-list">
                     <button class="btn-preset" data-preset="default">
@@ -276,11 +362,50 @@
                 </div>
             </div>
 
+            <!-- マスバネダンパー用プリセットパネル -->
+            <div id="card-msd-presets" class="card preset-panel" style="display: none;">
+                <div class="card-title">
+                    <span>マスバネダンパー 学習プリセット</span>
+                </div>
+                <div class="preset-list">
+                    <button class="btn-preset" data-preset-msd="underDamped">
+                        <span class="preset-name">1. 不足減衰 (ζ ≈ 0.17)</span>
+                        <span class="preset-desc">振動しながら徐々に静止する典型例</span>
+                    </button>
+                    <button class="btn-preset" data-preset-msd="criticallyDamped">
+                        <span class="preset-name">2. 臨界減衰 (ζ = 1.00)</span>
+                        <span class="preset-desc">行き過ぎ(オーバーシュート)なく最速で静止</span>
+                    </button>
+                    <button class="btn-preset" data-preset-msd="overDamped">
+                        <span class="preset-name">3. 過減衰 (ζ = 1.83)</span>
+                        <span class="preset-desc">強いダンパー粘性により緩慢に目標へ戻る</span>
+                    </button>
+                    <button class="btn-preset" data-preset-msd="undamped">
+                        <span class="preset-name">4. 非減衰単振動 (ζ = 0)</span>
+                        <span class="preset-desc">ダンパーなし(D=0)。永久に等振幅振動</span>
+                    </button>
+                    <button class="btn-preset" data-preset-msd="heavyStructure">
+                        <span class="preset-name">5. 大質量構造物</span>
+                        <span class="preset-desc">m=4.0kg, K=36N/m。巨大な慣性と復元力</span>
+                    </button>
+                    <button class="btn-preset" data-preset-msd="stiffFast">
+                        <span class="preset-name">6. 硬ばね・高周波</span>
+                        <span class="preset-desc">m=0.5kg, K=32N/m。素早く小刻みに振動</span>
+                    </button>
+                </div>
+
+                <div style="margin-top: 8px; padding: 10px; background: #0b0f19; border-radius: var(--radius-sm); border: 1px solid var(--border); font-size: 0.76rem; color: var(--text-secondary); line-height: 1.4;">
+                    <strong style="color: var(--accent-yellow);">💡 制御工学の着眼点:</strong><br>
+                    • バネが存在するため、<b>P制御（比例ゲインのみ）</b>ではバネの抗力と釣り合った場所で停止し、<b>目標位置に届かない定常偏差（オフセット）</b>が発生します。<br>
+                    • <b>I制御（積分ゲイン Ki）</b>を加えることで、時間とともに偏差が蓄積されて力が増加し、<b>定常偏差が完全にゼロ消去</b>されます！
+                </div>
+            </div>
+
             <!-- PID制御パラメータ調整カード -->
             <div class="card pid-panel" style="grid-column: 1 / -1;">
                 <div class="card-title">
                     <span>PID制御ゲイン調整 (Autoモード用)</span>
-                    <span style="font-size: 0.72rem; color: var(--accent-blue);">τ = Kp·e + Ki·∫e dt - Kd·ω</span>
+                    <span id="pid-formula-badge" style="font-size: 0.72rem; color: var(--accent-blue);">τ = Kp·e + Ki·∫e dt - Kd·ω</span>
                 </div>
                 <div class="param-grid">
                     <!-- Kp -->
@@ -304,7 +429,7 @@
                         <div class="param-slider-row">
                             <input id="param-ki" type="range" min="0.0" max="25.0" step="0.5" value="4.0">
                         </div>
-                        <span style="font-size: 0.68rem; color: var(--text-muted);">重力・摩擦の定常偏差をゼロ消去</span>
+                        <span id="pid-ki-desc" style="font-size: 0.68rem; color: var(--text-muted);">重力・バネ抗力による定常偏差をゼロ消去</span>
                     </div>
 
                     <!-- Kd -->
@@ -316,17 +441,26 @@
                         <div class="param-slider-row">
                             <input id="param-kd" type="range" min="0.0" max="20.0" step="0.5" value="6.0">
                         </div>
-                        <span style="font-size: 0.68rem; color: var(--text-muted);">角速度を抑える制動ブレーキ（ダンピング）</span>
+                        <span id="pid-kd-desc" style="font-size: 0.68rem; color: var(--text-muted);">速度を抑える制動ブレーキ（ダンピング）</span>
                     </div>
                 </div>
 
-                <!-- PIDゲインプリセット -->
-                <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-                    <span style="font-size: 0.76rem; color: var(--text-secondary); font-weight: 700;">ゲインプリセット:</span>
+                <!-- 振子用PIDゲインプリセット -->
+                <div id="pid-presets-pendulum" style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                    <span style="font-size: 0.76rem; color: var(--text-secondary); font-weight: 700;">振子用ゲイン:</span>
                     <button class="btn btn-sm btn-pid-preset" data-kp="25" data-ki="4" data-kd="6">1. 安定バランス (標準)</button>
                     <button class="btn btn-sm btn-pid-preset" data-kp="20" data-ki="0" data-kd="0">2. P制御のみ (振動を観察)</button>
                     <button class="btn btn-sm btn-pid-preset" data-kp="25" data-ki="0" data-kd="8">3. PD制御 (高制動・ダンピング)</button>
                     <button class="btn btn-sm btn-pid-preset" data-kp="45" data-ki="6" data-kd="9">4. 高速応答 (俊敏)</button>
+                </div>
+
+                <!-- MSD用PIDゲインプリセット -->
+                <div id="pid-presets-msd" style="margin-top: 10px; display: none; gap: 8px; flex-wrap: wrap; align-items: center;">
+                    <span style="font-size: 0.76rem; color: var(--text-secondary); font-weight: 700;">MSD用ゲイン:</span>
+                    <button class="btn btn-sm btn-pid-preset" data-kp="30" data-ki="12" data-kd="8">1. 標準 PID (定常偏差ゼロ＆速応)</button>
+                    <button class="btn btn-sm btn-pid-preset" data-kp="20" data-ki="0" data-kd="0">2. P制御のみ (定常偏差を観察！)</button>
+                    <button class="btn btn-sm btn-pid-preset" data-kp="30" data-ki="0" data-kd="10">3. PD制御 (制動重視・オーバーシュート小)</button>
+                    <button class="btn btn-sm btn-pid-preset" data-kp="20" data-ki="14" data-kd="0">4. PI制御 (定常偏差ゼロ・振動的)</button>
                 </div>
             </div>
         </section>

@@ -15,13 +15,16 @@ import { PendulumPhysics } from './physics.js';
 export class PIDController {
     constructor() {
         // デフォルトゲイン設定（標準振子 1m, 1kg の倒立・位置決めに最適化）
-        this.kp = 25.0; // 比例ゲイン [Nm/rad]
-        this.ki = 4.0;  // 積分ゲイン [Nm/(rad*s)]
-        this.kd = 6.0;  // 微分ゲイン [Nm*s/rad]
+        this.kp = 25.0; // 比例ゲイン
+        this.ki = 4.0;  // 積分ゲイン
+        this.kd = 6.0;  // 微分ゲイン
+
+        // 角度モード（true: [-π, π] でラップ, false: 線形偏差）
+        this.angleMode = true;
 
         // 内部状態
         this.integral = 0.0;
-        this.maxIntegral = 8.0; // アンチワインドアップ上限
+        this.maxIntegral = 20.0; // アンチワインドアップ上限
         this.lastError = 0.0;
 
         // 各項の現在値（デバッグ＆表示用）
@@ -44,21 +47,22 @@ export class PIDController {
     }
 
     /**
-     * トルク出力を計算
-     * @param {number} targetAngleRad 目標角度 [rad]
-     * @param {number} currentAngleRad 現在角度 [rad]
-     * @param {number} omega 現在角速度 [rad/s]
+     * 制御出力を計算
+     * @param {number} target 目標値 (角度 [rad] または 位置 [m])
+     * @param {number} current 現在値 (角度 [rad] または 位置 [m])
+     * @param {number} velocity 現在速度 (角速度 [rad/s] または 速度 [m/s])
      * @param {number} dt サンプリング時間 [s]
-     * @param {number} tauMax 最大トルク [Nm]
-     * @returns {number} 制御出力トルク τ [Nm]
+     * @param {number} maxOutput 最大出力 (トルク [Nm] または 外力 [N])
+     * @returns {number} 制御出力
      */
-    compute(targetAngleRad, currentAngleRad, omega, dt, tauMax) {
+    compute(target, current, velocity, dt, maxOutput) {
         if (dt <= 0) return 0;
 
-        // 1. 最短角度偏差 e ∈ [-π, π]
-        // 正: 目標が反時計回り(CCW)側にある => 正トルクを出して引き上げる
-        // 負: 目標が時計回り(CW)側にある => 負トルクを出して引き戻す
-        const error = PendulumPhysics.normalizeAngle(targetAngleRad - currentAngleRad);
+        // 1. 偏差 e の算出
+        let error = target - current;
+        if (this.angleMode) {
+            error = PendulumPhysics.normalizeAngle(error);
+        }
 
         // 2. P項 (比例)
         this.pTerm = this.kp * error;
@@ -69,18 +73,17 @@ export class PIDController {
         this.integral = Math.max(-this.maxIntegral, Math.min(this.maxIntegral, this.integral));
         this.iTerm = this.ki * this.integral;
 
-        // 4. D項 (角速度フィードバック: de/dt = -ω)
-        // 角度が増加している時(ω>0)は反対方向のブレーキ(-Kd * ω)をかける
-        this.dTerm = -this.kd * omega;
+        // 4. D項 (速度フィードバック: de/dt = -v)
+        this.dTerm = -this.kd * velocity;
 
         // 5. 合計制御出力
         let u = this.pTerm + this.iTerm + this.dTerm;
 
         // 6. 出力サチュレーション
-        this.output = Math.max(-tauMax, Math.min(tauMax, u));
+        this.output = Math.max(-maxOutput, Math.min(maxOutput, u));
 
-        // トルクが飽和している場合は、積分項の増加を抑止（クランピング式アンチワインドアップ）
-        if ((u > tauMax && error > 0) || (u < -tauMax && error < 0)) {
+        // 出力が飽和している場合は、積分項の増加を抑止（クランピング式アンチワインドアップ）
+        if ((u > maxOutput && error > 0) || (u < -maxOutput && error < 0)) {
             this.integral -= error * dt;
         }
 

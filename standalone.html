@@ -68,6 +68,57 @@ header {
     z-index: 100;
 }
 
+/* システム切替バー（ヘッダー直下） */
+.system-selector-bar {
+    background: #0b0f19;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    padding: 8px 16px;
+    position: sticky;
+    top: 53px;
+    z-index: 90;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.sys-btn {
+    flex: 1;
+    max-width: 260px;
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    padding: 8px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    user-select: none;
+}
+
+.sys-btn:hover {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border-color: var(--border-highlight);
+}
+
+.sys-btn.active {
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.25), rgba(14, 165, 233, 0.15));
+    color: #38bdf8;
+    border-color: #38bdf8;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+    font-weight: 700;
+}
+
+.sys-icon {
+    font-size: 1.05rem;
+}
+
 .logo-container {
     display: flex;
     align-items: center;
@@ -715,6 +766,18 @@ input[type="range"] {
         font-size: 1.0rem;
     }
 
+    .system-selector-bar {
+        padding: 5px 8px;
+        gap: 6px;
+        top: 0;
+        position: relative;
+    }
+
+    .sys-btn {
+        padding: 6px 10px;
+        font-size: 0.8rem;
+    }
+
     .mobile-nav-tabs {
         display: flex;
         position: sticky;
@@ -734,7 +797,7 @@ input[type="range"] {
     /* スマホでも全セクションを常時表示（サイズ0pxバグを根本解決） */
     .tab-section {
         display: flex !important;
-        scroll-margin-top: 55px;
+        scroll-margin-top: 50px;
     }
 
     /* シミュレータ画面のスマホ最適化 */
@@ -802,7 +865,7 @@ input[type="range"] {
     <header>
         <div class="logo-container">
             <span class="logo-badge">CONTROL ENG</span>
-            <h1>振子モータ制御</h1>
+            <h1 id="app-header-title">制御工学シミュレータ</h1>
         </div>
         <div class="header-actions">
             <button id="btn-share-mobile" class="btn" title="スマホでアクセスするためのQRコードを表示">📱 スマホ共有</button>
@@ -810,6 +873,18 @@ input[type="range"] {
             <button id="btn-reset" class="btn btn-danger">↺ リセット</button>
         </div>
     </header>
+
+    <!-- システム切替バー（振子モータ制御 ⇔ マス・バネ・ダンパー系） -->
+    <div class="system-selector-bar">
+        <button id="btn-sys-pendulum" class="sys-btn active" title="回転振子モータ制御系">
+            <span class="sys-icon">🔄</span>
+            <span class="sys-title">振子モータ制御系</span>
+        </button>
+        <button id="btn-sys-msd" class="sys-btn" title="マス・バネ・ダンパー位置制御系">
+            <span class="sys-icon">⏹️</span>
+            <span class="sys-title">マス・バネ・ダンパー系</span>
+        </button>
+    </div>
 
     <!-- スマホ接続用QRコードモーダル -->
     <div id="qr-modal" class="modal-backdrop" style="display: none;">
@@ -842,17 +917,17 @@ input[type="range"] {
 
     <!-- モバイル用ナビゲーションタブ（スマホ画面で表示） -->
     <nav class="mobile-nav-tabs">
-        <button class="mobile-tab-btn active" data-tab="sim">🎮 振子操作</button>
+        <button class="mobile-tab-btn active" data-tab="sim">🎮 操作画面</button>
         <button class="mobile-tab-btn" data-tab="charts">📈 応答グラフ</button>
         <button class="mobile-tab-btn" data-tab="settings">⚙️ 設定</button>
     </nav>
 
     <!-- メインコンテンツ -->
     <main class="app-container">
-        <!-- セクション 1: 振子シミュレータ本体 -->
+        <!-- セクション 1: シミュレータ本体 -->
         <section id="tab-sim" class="card sim-section tab-section tab-active">
             <div class="card-title">
-                <span>振子シミュレーション (360°回転)</span>
+                <span id="sim-title-text">振子シミュレーション (360°回転)</span>
                 <span style="font-size: 0.75rem; color: var(--accent-yellow);">☝️ 指・マウスで掴んで動かせます</span>
             </div>
 
@@ -861,7 +936,7 @@ input[type="range"] {
                 <canvas id="simCanvas"></canvas>
             </div>
 
-            <!-- トルク操作パネル (Manual / Auto PID ＆ アナログ連続スライダー) -->
+            <!-- 操作パネル (Manual / Auto PID ＆ アナログ連続スライダー) -->
             <div class="control-bar">
                 <!-- モード切替バー: Manual (手動) vs Auto (PID自動制御) -->
                 <div class="drive-mode-bar">
@@ -869,7 +944,7 @@ input[type="range"] {
                         <span style="font-size: 0.85rem; font-weight: 700; color: var(--text-secondary);">モード:</span>
                         <div class="drive-toggle-group">
                             <button id="drive-manual" class="btn-drive active" title="人間による手動操作">🎮 Manual (手動)</button>
-                            <button id="drive-auto" class="btn-drive" title="PIDコントローラによる目標角度への自動位置制御">🤖 Auto (PID制御)</button>
+                            <button id="drive-auto" class="btn-drive" title="PIDコントローラによる目標値への自動位置制御">🤖 Auto (PID制御)</button>
                         </div>
                     </div>
                     <div id="pid-status-badge" class="pid-status-badge" style="display: none;">
@@ -880,21 +955,21 @@ input[type="range"] {
                 <!-- ステータス ＆ 設定ヘッダー -->
                 <div class="slider-header-row">
                     <div class="slider-title-group">
-                        <span class="torque-meter-label">モータ出力:</span>
+                        <span id="control-input-label" class="torque-meter-label">モータ出力:</span>
                         <span id="torque-val-text" class="torque-val-badge">0.00 Nm (0%)</span>
                     </div>
 
                     <div class="slider-mode-group">
-                        <button id="btn-zero" class="btn btn-sm" title="トルクを即座にゼロにします">切断 (Space)</button>
+                        <button id="btn-zero" class="btn btn-sm" title="出力を即座にゼロにします">ゼロ復帰 (Space)</button>
                         <div class="mode-toggle-group" id="manual-mode-toggles">
-                            <button id="mode-spring" class="btn-mode active" title="指・マウスを離すと中央(0Nm)に戻るジョイスティック風操作">🔄 スプリング復帰</button>
+                            <button id="mode-spring" class="btn-mode active" title="指・マウスを離すと中央(0)に戻るジョイスティック風操作">🔄 スプリング復帰</button>
                             <button id="mode-hold" class="btn-mode" title="指・マウスを離してもその出力を保持するスロットル操作">🔒 出力保持</button>
                         </div>
                     </div>
                 </div>
 
                 <!-- メイン: インタラクティブ・アナログパドル（ドラッグ・スワイプ領域） -->
-                <div class="slider-touch-area" id="torque-slider-area" title="マウスドラッグまたは指スワイプで連続的にトルクを調整できます">
+                <div class="slider-touch-area" id="torque-slider-area" title="マウスドラッグまたは指スワイプで連続的に出力を調整できます">
                     <div class="slider-track" id="torque-slider-track">
                         <div class="slider-zero-line"></div>
                         <div id="gauge-fill" class="gauge-fill"></div>
@@ -904,20 +979,20 @@ input[type="range"] {
                     </div>
 
                     <!-- スケール目盛り -->
-                    <div class="slider-scale-labels">
-                        <span>◀ CCW (-100%)</span>
-                        <span>-50%</span>
+                    <div class="slider-scale-labels" id="slider-scale-labels">
+                        <span id="scale-min-label">◀ CCW (-100%)</span>
+                        <span id="scale-mid-left">-50%</span>
                         <span style="color: var(--text-primary); font-weight: 700;">0 (停止)</span>
-                        <span>+50%</span>
-                        <span>CW (+100%) ▶</span>
+                        <span id="scale-mid-right">+50%</span>
+                        <span id="scale-max-label">CW (+100%) ▶</span>
                     </div>
                 </div>
 
                 <!-- 補助ボタン & ヒント -->
                 <div class="slider-footer-row">
                     <div class="nudge-buttons">
-                        <button id="btn-nudge-left" class="btn btn-sm" title="少し左回転トルクを増やす">◀ 微動 (-0.5Nm)</button>
-                        <button id="btn-nudge-right" class="btn btn-sm" title="少し右回転トルクを増やす">微動 (+0.5Nm) ▶</button>
+                        <button id="btn-nudge-left" class="btn btn-sm" title="出力を左/引張方向に増やす">◀ 微動 (-)</button>
+                        <button id="btn-nudge-right" class="btn btn-sm" title="出力を右/押出方向に増やす">微動 (+) ▶</button>
                     </div>
                     <div class="control-hints">
                         💡 <b>スワイプ / ドラッグ</b>で無段階調整 | <b>マウスホイール</b>で微調整 | <b>[←] [→]</b> スムーズ加速
@@ -930,8 +1005,8 @@ input[type="range"] {
         <section id="tab-charts" class="card charts-section tab-section">
             <div class="chart-box">
                 <div class="card-title">
-                    <span>時系列応答 (Time History)</span>
-                    <span style="font-size: 0.72rem; color: var(--text-muted);">θ・θ_ref・τ</span>
+                    <span id="time-chart-title">時系列応答 (Time History)</span>
+                    <span id="time-chart-sub" style="font-size: 0.72rem; color: var(--text-muted);">θ・θ_ref・τ</span>
                 </div>
                 <div class="chart-canvas-wrapper">
                     <canvas id="timeCanvas"></canvas>
@@ -940,8 +1015,8 @@ input[type="range"] {
 
             <div class="chart-box">
                 <div class="card-title">
-                    <span>相平面プロット (Phase Plane: θ vs ω)</span>
-                    <span style="font-size: 0.72rem; color: var(--text-muted);">平衡点と状態軌跡</span>
+                    <span id="phase-chart-title">相平面プロット (Phase Plane)</span>
+                    <span id="phase-chart-sub" style="font-size: 0.72rem; color: var(--text-muted);">平衡点と状態軌跡</span>
                 </div>
                 <div class="chart-canvas-wrapper">
                     <canvas id="phaseCanvas"></canvas>
@@ -951,10 +1026,10 @@ input[type="range"] {
 
         <!-- セクション 3: パラメータ設定 & プリセット & 解説 -->
         <section id="tab-settings" class="settings-section tab-section">
-            <!-- パラメータ変更スライダー -->
-            <div class="card">
+            <!-- 振子用パラメータ調整カード -->
+            <div id="card-pendulum-params" class="card">
                 <div class="card-title">
-                    <span>物理・制御パラメータ調整</span>
+                    <span>振子 物理パラメータ調整</span>
                     <span style="font-size: 0.72rem; color: var(--text-muted);">リアルタイム反映</span>
                 </div>
                 <div class="param-grid">
@@ -1026,10 +1101,84 @@ input[type="range"] {
                 </div>
             </div>
 
-            <!-- プリセット & 制御工学ヒント -->
-            <div class="card preset-panel">
+            <!-- マス・バネ・ダンパー系用パラメータ調整カード -->
+            <div id="card-msd-params" class="card" style="display: none;">
                 <div class="card-title">
-                    <span>学習プリセット</span>
+                    <span>マス・バネ・ダンパー 物理パラメータ調整</span>
+                    <span style="font-size: 0.72rem; color: var(--accent-blue);">mẍ + Dẋ + Kx = F</span>
+                </div>
+                <div class="param-grid">
+                    <!-- 質量 m -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">マスの質量 (m)</span>
+                            <span id="val-msd-m" class="param-value">1.00 kg</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-msd-m" type="range" min="0.2" max="5.0" step="0.1" value="1.0">
+                        </div>
+                    </div>
+
+                    <!-- ばね定数 K -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">ばね定数 (K)</span>
+                            <span id="val-msd-k" class="param-value">12.0 N/m</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-msd-k" type="range" min="1.0" max="40.0" step="0.5" value="12.0">
+                        </div>
+                    </div>
+
+                    <!-- 減衰係数 D -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">減衰係数 (D)</span>
+                            <span id="val-msd-d" class="param-value">1.20 Ns/m</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-msd-d" type="range" min="0.0" max="15.0" step="0.1" value="1.2">
+                        </div>
+                    </div>
+
+                    <!-- 最大外力 F_max -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">最大入力外力 (F_max)</span>
+                            <span id="val-msd-fMax" class="param-value">20.0 N</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-msd-fMax" type="range" min="5.0" max="50.0" step="1.0" value="20.0">
+                        </div>
+                    </div>
+
+                    <!-- 目標位置 x_target -->
+                    <div class="param-item">
+                        <div class="param-header">
+                            <span class="param-name">目標変位 (x_ref)</span>
+                            <span id="val-msd-targetX" class="param-value">+0.50 m</span>
+                        </div>
+                        <div class="param-slider-row">
+                            <input id="param-msd-targetX" type="range" min="-0.8" max="1.0" step="0.05" value="0.5">
+                        </div>
+                    </div>
+
+                    <!-- 系の特性（固有角周波数 ωn & 減衰比 ζ） -->
+                    <div class="param-item" style="background: #0b0f19; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px;">
+                        <span class="param-name" style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-bottom: 4px;">2次系の動特性</span>
+                        <div style="font-family: var(--font-mono); font-size: 0.8rem; line-height: 1.5;">
+                            <div>固有ωn : <b id="calc-msd-wn" style="color: var(--accent-blue);">3.46</b> rad/s</div>
+                            <div>減衰比 ζ : <b id="calc-msd-zeta" style="color: var(--accent-yellow);">0.17</b></div>
+                            <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 2px;">特性: <span id="calc-msd-damping" style="font-weight: 700; color: #38bdf8;">不足減衰 (振動的)</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 振子用プリセットパネル -->
+            <div id="card-pendulum-presets" class="card preset-panel">
+                <div class="card-title">
+                    <span>振子 学習プリセット</span>
                 </div>
                 <div class="preset-list">
                     <button class="btn-preset" data-preset="default">
@@ -1065,11 +1214,50 @@ input[type="range"] {
                 </div>
             </div>
 
+            <!-- マスバネダンパー用プリセットパネル -->
+            <div id="card-msd-presets" class="card preset-panel" style="display: none;">
+                <div class="card-title">
+                    <span>マスバネダンパー 学習プリセット</span>
+                </div>
+                <div class="preset-list">
+                    <button class="btn-preset" data-preset-msd="underDamped">
+                        <span class="preset-name">1. 不足減衰 (ζ ≈ 0.17)</span>
+                        <span class="preset-desc">振動しながら徐々に静止する典型例</span>
+                    </button>
+                    <button class="btn-preset" data-preset-msd="criticallyDamped">
+                        <span class="preset-name">2. 臨界減衰 (ζ = 1.00)</span>
+                        <span class="preset-desc">行き過ぎ(オーバーシュート)なく最速で静止</span>
+                    </button>
+                    <button class="btn-preset" data-preset-msd="overDamped">
+                        <span class="preset-name">3. 過減衰 (ζ = 1.83)</span>
+                        <span class="preset-desc">強いダンパー粘性により緩慢に目標へ戻る</span>
+                    </button>
+                    <button class="btn-preset" data-preset-msd="undamped">
+                        <span class="preset-name">4. 非減衰単振動 (ζ = 0)</span>
+                        <span class="preset-desc">ダンパーなし(D=0)。永久に等振幅振動</span>
+                    </button>
+                    <button class="btn-preset" data-preset-msd="heavyStructure">
+                        <span class="preset-name">5. 大質量構造物</span>
+                        <span class="preset-desc">m=4.0kg, K=36N/m。巨大な慣性と復元力</span>
+                    </button>
+                    <button class="btn-preset" data-preset-msd="stiffFast">
+                        <span class="preset-name">6. 硬ばね・高周波</span>
+                        <span class="preset-desc">m=0.5kg, K=32N/m。素早く小刻みに振動</span>
+                    </button>
+                </div>
+
+                <div style="margin-top: 8px; padding: 10px; background: #0b0f19; border-radius: var(--radius-sm); border: 1px solid var(--border); font-size: 0.76rem; color: var(--text-secondary); line-height: 1.4;">
+                    <strong style="color: var(--accent-yellow);">💡 制御工学の着眼点:</strong><br>
+                    • バネが存在するため、<b>P制御（比例ゲインのみ）</b>ではバネの抗力と釣り合った場所で停止し、<b>目標位置に届かない定常偏差（オフセット）</b>が発生します。<br>
+                    • <b>I制御（積分ゲイン Ki）</b>を加えることで、時間とともに偏差が蓄積されて力が増加し、<b>定常偏差が完全にゼロ消去</b>されます！
+                </div>
+            </div>
+
             <!-- PID制御パラメータ調整カード -->
             <div class="card pid-panel" style="grid-column: 1 / -1;">
                 <div class="card-title">
                     <span>PID制御ゲイン調整 (Autoモード用)</span>
-                    <span style="font-size: 0.72rem; color: var(--accent-blue);">τ = Kp·e + Ki·∫e dt - Kd·ω</span>
+                    <span id="pid-formula-badge" style="font-size: 0.72rem; color: var(--accent-blue);">τ = Kp·e + Ki·∫e dt - Kd·ω</span>
                 </div>
                 <div class="param-grid">
                     <!-- Kp -->
@@ -1093,7 +1281,7 @@ input[type="range"] {
                         <div class="param-slider-row">
                             <input id="param-ki" type="range" min="0.0" max="25.0" step="0.5" value="4.0">
                         </div>
-                        <span style="font-size: 0.68rem; color: var(--text-muted);">重力・摩擦の定常偏差をゼロ消去</span>
+                        <span id="pid-ki-desc" style="font-size: 0.68rem; color: var(--text-muted);">重力・バネ抗力による定常偏差をゼロ消去</span>
                     </div>
 
                     <!-- Kd -->
@@ -1105,17 +1293,26 @@ input[type="range"] {
                         <div class="param-slider-row">
                             <input id="param-kd" type="range" min="0.0" max="20.0" step="0.5" value="6.0">
                         </div>
-                        <span style="font-size: 0.68rem; color: var(--text-muted);">角速度を抑える制動ブレーキ（ダンピング）</span>
+                        <span id="pid-kd-desc" style="font-size: 0.68rem; color: var(--text-muted);">速度を抑える制動ブレーキ（ダンピング）</span>
                     </div>
                 </div>
 
-                <!-- PIDゲインプリセット -->
-                <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-                    <span style="font-size: 0.76rem; color: var(--text-secondary); font-weight: 700;">ゲインプリセット:</span>
+                <!-- 振子用PIDゲインプリセット -->
+                <div id="pid-presets-pendulum" style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                    <span style="font-size: 0.76rem; color: var(--text-secondary); font-weight: 700;">振子用ゲイン:</span>
                     <button class="btn btn-sm btn-pid-preset" data-kp="25" data-ki="4" data-kd="6">1. 安定バランス (標準)</button>
                     <button class="btn btn-sm btn-pid-preset" data-kp="20" data-ki="0" data-kd="0">2. P制御のみ (振動を観察)</button>
                     <button class="btn btn-sm btn-pid-preset" data-kp="25" data-ki="0" data-kd="8">3. PD制御 (高制動・ダンピング)</button>
                     <button class="btn btn-sm btn-pid-preset" data-kp="45" data-ki="6" data-kd="9">4. 高速応答 (俊敏)</button>
+                </div>
+
+                <!-- MSD用PIDゲインプリセット -->
+                <div id="pid-presets-msd" style="margin-top: 10px; display: none; gap: 8px; flex-wrap: wrap; align-items: center;">
+                    <span style="font-size: 0.76rem; color: var(--text-secondary); font-weight: 700;">MSD用ゲイン:</span>
+                    <button class="btn btn-sm btn-pid-preset" data-kp="30" data-ki="12" data-kd="8">1. 標準 PID (定常偏差ゼロ＆速応)</button>
+                    <button class="btn btn-sm btn-pid-preset" data-kp="20" data-ki="0" data-kd="0">2. P制御のみ (定常偏差を観察！)</button>
+                    <button class="btn btn-sm btn-pid-preset" data-kp="30" data-ki="0" data-kd="10">3. PD制御 (制動重視・オーバーシュート小)</button>
+                    <button class="btn btn-sm btn-pid-preset" data-kp="20" data-ki="14" data-kd="0">4. PI制御 (定常偏差ゼロ・振動的)</button>
                 </div>
             </div>
         </section>
@@ -1789,10 +1986,739 @@ class PendulumRenderer {
 }
 
 /**
- * charts.js - 制御工学学習用グラフ（時系列応答＆相平面）
+ * physics-msd.js - マス・バネ・ダンパー系の物理モデルおよび数値計算（RK4）
+ *
+ * 運動方程式:
+ *   m * d2x/dt2 + D * dx/dt + K * x = F
+ *   d2x/dt2 = (F - D * v - K * x) / m
+ *
+ * 物理量:
+ *   x       : 変位 [m] (つり合い位置・自然長を x = 0 とする)
+ *   v       : 速度 [m/s]
+ *   a       : 加速度 [m/s^2]
+ *   m       : 質量 [kg]
+ *   K       : ばね定数 [N/m]
+ *   D       : 粘性減衰係数 [N*s/m]
+ *   F       : 外力 [N] (|F| <= Fmax)
+ *   xtarget : 目標変位 [m]
+ *
+ * 制御工学的パラメータ:
+ *   固有角周波数 ωn = sqrt(K / m) [rad/s]
+ *   減衰比       ζ  = D / (2 * sqrt(m * K))
  */
 
+class MassSpringDamperPhysics {
+    constructor() {
+        // 物理パラメータ初期値
+        this.m = 1.0;            // 質量 [kg]
+        this.k = 12.0;           // ばね定数 K [N/m]
+        this.d = 1.2;            // 減衰係数 D [N*s/m] (ζ ≈ 0.17: 典型的な不足減衰)
+        this.fMax = 20.0;        // 最大入力外力 [N]
+        this.targetX = 0.5;      // 目標位置 [m] (初期値: +0.5m)
 
+        // 状態変数
+        this.x = 0.0;            // 変位 [m] (初期: つり合い位置)
+        this.v = 0.0;            // 速度 [m/s]
+        this.a = 0.0;            // 加速度 [m/s^2]
+        this.f = 0.0;            // 現在の入力外力 [N]
+
+        // シミュレーション時刻
+        this.time = 0.0;
+    }
+
+    /**
+     * 固有角周波数 ωn = sqrt(K / m) [rad/s]
+     */
+    get omegaN() {
+        return Math.sqrt(Math.max(0.001, this.k) / Math.max(0.001, this.m));
+    }
+
+    /**
+     * 減衰比 ζ = D / (2 * sqrt(m * K))
+     */
+    get zeta() {
+        const denom = 2.0 * Math.sqrt(Math.max(0.001, this.m) * Math.max(0.001, this.k));
+        return this.d / denom;
+    }
+
+    /**
+     * 減衰特性の日本語ラベル
+     */
+    get dampingTypeLabel() {
+        const z = this.zeta;
+        if (z < 0.001) return '非減衰 (ζ=0)';
+        if (z < 0.95) return `不足減衰 (ζ=${z.toFixed(2)})`;
+        if (z <= 1.05) return `臨界減衰 (ζ=${z.toFixed(2)})`;
+        return `過減衰 (ζ=${z.toFixed(2)})`;
+    }
+
+    /**
+     * 運動エネルギー T = 1/2 * m * v^2 [J]
+     */
+    get kineticEnergy() {
+        return 0.5 * this.m * this.v * this.v;
+    }
+
+    /**
+     * 弾性ポテンシャルエネルギー V = 1/2 * K * x^2 [J]
+     */
+    get potentialEnergy() {
+        return 0.5 * this.k * this.x * this.x;
+    }
+
+    /**
+     * 力学的総エネルギー E = T + V [J]
+     */
+    get totalEnergy() {
+        return this.kineticEnergy + this.potentialEnergy;
+    }
+
+    /**
+     * 目標位置との偏差 e = targetX - x [m]
+     */
+    get error() {
+        return this.targetX - this.x;
+    }
+
+    /**
+     * 現在の加速度 a を計算（状態微分関数）
+     * @param {number} x 変位 [m]
+     * @param {number} v 速度 [m/s]
+     * @param {number} f 入力外力 [N]
+     * @returns {number} 加速度 a [m/s^2]
+     */
+    computeAcceleration(x, v, f) {
+        const clampedF = Math.max(-this.fMax, Math.min(this.fMax, f));
+        const springForce = -this.k * x;
+        const damperForce = -this.d * v;
+        const totalForce = clampedF + damperForce + springForce;
+        return totalForce / Math.max(0.01, this.m);
+    }
+
+    /**
+     * 4次ルンゲ＝クッタ法（RK4）による数値積分
+     * @param {number} dt 時間刻み [s]
+     * @param {number} appliedForce 入力外力 [N]
+     */
+    stepRK4(dt, appliedForce) {
+        this.f = Math.max(-this.fMax, Math.min(this.fMax, appliedForce));
+
+        const x0 = this.x;
+        const v0 = this.v;
+        const f = this.f;
+
+        // k1
+        const k1_x = v0;
+        const k1_v = this.computeAcceleration(x0, v0, f);
+
+        // k2
+        const x_k2 = x0 + 0.5 * dt * k1_x;
+        const v_k2 = v0 + 0.5 * dt * k1_v;
+        const k2_x = v_k2;
+        const k2_v = this.computeAcceleration(x_k2, v_k2, f);
+
+        // k3
+        const x_k3 = x0 + 0.5 * dt * k2_x;
+        const v_k3 = v0 + 0.5 * dt * k2_v;
+        const k3_x = v_k3;
+        const k3_v = this.computeAcceleration(x_k3, v_k3, f);
+
+        // k4
+        const x_k4 = x0 + dt * k3_x;
+        const v_k4 = v0 + dt * k3_v;
+        const k4_x = v_k4;
+        const k4_v = this.computeAcceleration(x_k4, v_k4, f);
+
+        // 状態更新
+        this.x += (dt / 6.0) * (k1_x + 2.0 * k2_x + 2.0 * k3_x + k4_x);
+        this.v += (dt / 6.0) * (k1_v + 2.0 * k2_v + 2.0 * k3_v + k4_v);
+        this.a = this.computeAcceleration(this.x, this.v, this.f);
+        this.time += dt;
+    }
+
+    /**
+     * サブステップによる安定した時間発展
+     * @param {number} totalDt 進める合計時間 [s]
+     * @param {number} appliedForce 入力外力 [N]
+     */
+    update(totalDt, appliedForce) {
+        const subDt = 0.002;
+        let remaining = totalDt;
+        while (remaining > 0) {
+            const dt = Math.min(remaining, subDt);
+            this.stepRK4(dt, appliedForce);
+            remaining -= dt;
+        }
+    }
+
+    /**
+     * 状態のリセット
+     * @param {number} initialX 初期位置 [m]
+     * @param {number} initialV 初期速度 [m/s]
+     */
+    reset(initialX = 0.0, initialV = 0.0) {
+        this.x = initialX;
+        this.v = initialV;
+        this.a = 0.0;
+        this.f = 0.0;
+        this.time = 0.0;
+    }
+}
+
+/**
+ * renderer-msd.js - マス・バネ・ダンパー系のCanvasアニメーション描画
+ */
+
+class MassSpringDamperRenderer {
+    /**
+     * @param {HTMLCanvasElement} canvas 
+     */
+    constructor(canvas) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.dpr = window.devicePixelRatio || 1;
+
+        this.colors = {
+            bg: '#0f172a',
+            wall: '#334155',
+            wallHatch: '#1e293b',
+            floor: '#475569',
+            floorLine: '#1e293b',
+            spring: '#38bdf8',
+            damperCylinder: '#64748b',
+            damperPiston: '#cbd5e1',
+            massBox: '#0284c7',
+            massBorder: '#7dd3fc',
+            massGlow: 'rgba(56, 189, 248, 0.4)',
+            wheel: '#1e293b',
+            targetGhost: 'rgba(234, 179, 8, 0.35)',
+            targetBorder: '#eab308',
+            forceRight: '#10b981',    // 正の外力 (右向き)
+            forceLeft: '#f43f5e',     // 負の外力 (左向き)
+            centerLine: '#94a3b8',
+            textMain: '#f1f5f9',
+            textMuted: '#64748b'
+        };
+
+        this.resize();
+    }
+
+    resize() {
+        const rect = this.canvas.getBoundingClientRect();
+        this.width = rect.width || 300;
+        this.height = rect.height || 300;
+        this.canvas.width = this.width * this.dpr;
+        this.canvas.height = this.height * this.dpr;
+        this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    }
+
+    /**
+     * レイアウト寸法の計算（メートル -> ピクセル変換）
+     */
+    getLayoutMetrics(physics) {
+        const w = this.width;
+        const h = this.height;
+
+        const wallX = 40;                 // 固定壁のX位置
+        const floorY = h * 0.72;          // 床面のY位置
+        const massWidth = Math.max(50, Math.min(90, 60 * Math.cbrt(physics.m)));
+        const massHeight = massWidth * 0.85;
+
+        // 表示スケール: ±1.2m が画面に収まるように設定
+        // つり合い位置 (x = 0) のマスの中心位置
+        const centerX0 = wallX + (w - wallX) * 0.42;
+        const scalePxPerMeter = (w - wallX) * 0.36; // 1mあたりのピクセル数
+
+        // 現在のマスの中心X座標
+        const massCenterX = centerX0 + physics.x * scalePxPerMeter;
+        // マスの左端と右端
+        const massLeftX = massCenterX - massWidth * 0.5;
+        const massRightX = massCenterX + massWidth * 0.5;
+        const massTopY = floorY - massHeight - 12; // 車輪分12px浮かす
+
+        // 目標位置のマスの中心X座標
+        const targetCenterX = centerX0 + physics.targetX * scalePxPerMeter;
+
+        return {
+            wallX, floorY, scalePxPerMeter, centerX0,
+            massWidth, massHeight, massCenterX, massLeftX, massRightX, massTopY,
+            targetCenterX
+        };
+    }
+
+    /**
+     * マスの当たり判定（タッチ・ドラッグ用）
+     */
+    getMassPosition(physics) {
+        const m = this.getLayoutMetrics(physics);
+        return {
+            x: m.massCenterX,
+            y: m.massTopY + m.massHeight * 0.5,
+            width: m.massWidth,
+            height: m.massHeight,
+            left: m.massLeftX,
+            right: m.massRightX,
+            top: m.massTopY,
+            bottom: m.floorY,
+            scalePxPerMeter: m.scalePxPerMeter,
+            centerX0: m.centerX0
+        };
+    }
+
+    /**
+     * 画面全体の描画
+     */
+    draw(physics, stateStatus = {}) {
+        const ctx = this.ctx;
+        const w = this.width;
+        const h = this.height;
+
+        ctx.fillStyle = this.colors.bg;
+        ctx.fillRect(0, 0, w, h);
+
+        const m = this.getLayoutMetrics(physics);
+
+        // 1. 床面とルーラー目盛り
+        this.drawFloorAndRuler(m);
+
+        // 2. つり合い位置 (x=0) のセンターライン
+        this.drawCenterLine(m);
+
+        // 3. 目標位置のゴースト
+        this.drawTargetGhost(m, physics);
+
+        // 4. 左端の固定壁
+        this.drawWall(m);
+
+        // 5. コイルばね（上段）
+        this.drawSpring(m, physics);
+
+        // 6. ダッシュポットダンパー（下段）
+        this.drawDamper(m, physics);
+
+        // 7. マスブロック（車輪付き）
+        this.drawMassBlock(m, physics, stateStatus.isDragging);
+
+        // 8. 入力外力 F のベクトル矢印
+        this.drawForceVector(m, physics);
+
+        // 9. HUD表示
+        this.drawHUD(m, physics, stateStatus);
+    }
+
+    drawWall(m) {
+        const ctx = this.ctx;
+        const wallW = m.wallX;
+        const wallH = m.floorY + 20;
+
+        ctx.save();
+        // 壁の本体
+        ctx.fillStyle = this.colors.wall;
+        ctx.fillRect(0, 20, wallW, wallH);
+
+        // 斜線ハッチング
+        ctx.strokeStyle = this.colors.wallHatch;
+        ctx.lineWidth = 2;
+        for (let y = 10; y < wallH + 40; y += 12) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(wallW, y - wallW);
+            ctx.stroke();
+        }
+
+        // 壁の右境界線
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(wallW, 20);
+        ctx.lineTo(wallW, m.floorY);
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
+    drawFloorAndRuler(m) {
+        const ctx = this.ctx;
+        ctx.save();
+
+        // 床面ライン
+        ctx.strokeStyle = this.colors.floor;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(m.wallX, m.floorY);
+        ctx.lineTo(this.width, m.floorY);
+        ctx.stroke();
+
+        // 目盛り刻み (-1.0m 〜 +1.5m)
+        const ticks = [-1.0, -0.5, 0.0, 0.5, 1.0, 1.5];
+        ctx.fillStyle = this.colors.textMuted;
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+
+        ticks.forEach(tVal => {
+            const x = m.centerX0 + tVal * m.scalePxPerMeter;
+            if (x > m.wallX + 15 && x < this.width - 15) {
+                ctx.strokeStyle = tVal === 0 ? this.colors.centerLine : this.colors.floorLine;
+                ctx.lineWidth = tVal === 0 ? 2 : 1;
+                ctx.beginPath();
+                ctx.moveTo(x, m.floorY);
+                ctx.lineTo(x, m.floorY + (tVal === 0 ? 8 : 5));
+                ctx.stroke();
+
+                const label = tVal > 0 ? `+${tVal.toFixed(1)}m` : `${tVal.toFixed(1)}m`;
+                ctx.fillText(label, x, m.floorY + 10);
+            }
+        });
+
+        ctx.restore();
+    }
+
+    drawCenterLine(m) {
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(m.centerX0, 30);
+        ctx.lineTo(m.centerX0, m.floorY);
+        ctx.stroke();
+
+        ctx.fillStyle = this.colors.textMuted;
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('x = 0 (自然長)', m.centerX0, 24);
+        ctx.restore();
+    }
+
+    drawTargetGhost(m, physics) {
+        const ctx = this.ctx;
+        const gx = m.targetCenterX - m.massWidth * 0.5;
+        const gy = m.massTopY;
+
+        ctx.save();
+        ctx.fillStyle = this.colors.targetGhost;
+        ctx.strokeStyle = this.colors.targetBorder;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.roundRect(gx, gy, m.massWidth, m.massHeight, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        // ターゲットマーク
+        ctx.setLineDash([]);
+        ctx.fillStyle = this.colors.targetBorder;
+        ctx.beginPath();
+        ctx.arc(m.targetCenterX, gy + m.massHeight * 0.5, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('TARGET', m.targetCenterX, gy - 6);
+        ctx.restore();
+    }
+
+    drawSpring(m, physics) {
+        const ctx = this.ctx;
+        const startX = m.wallX;
+        const endX = m.massLeftX;
+        const y = m.massTopY + m.massHeight * 0.32; // 上段
+        const coils = 14;
+        const springWidth = Math.max(20, endX - startX);
+        const coilAmp = 12; // コイルの振幅（上下）
+
+        ctx.save();
+        ctx.strokeStyle = this.colors.spring;
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        ctx.beginPath();
+        ctx.moveTo(startX, y);
+
+        // リードイン（壁からの直線）
+        const lead = 12;
+        ctx.lineTo(startX + lead, y);
+
+        const activeW = springWidth - lead * 2;
+        const step = activeW / coils;
+
+        for (let i = 0; i < coils; i++) {
+            const cx1 = startX + lead + (i + 0.25) * step;
+            const cy1 = y - coilAmp;
+            const cx2 = startX + lead + (i + 0.75) * step;
+            const cy2 = y + coilAmp;
+            ctx.lineTo(cx1, cy1);
+            ctx.lineTo(cx2, cy2);
+        }
+
+        // リードアウト（マスへの直線）
+        ctx.lineTo(endX - lead, y);
+        ctx.lineTo(endX, y);
+        ctx.stroke();
+
+        // ばね定数 K の表示
+        ctx.fillStyle = this.colors.spring;
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`K=${physics.k.toFixed(1)} N/m`, startX + springWidth * 0.5, y - coilAmp - 4);
+
+        ctx.restore();
+    }
+
+    drawDamper(m, physics) {
+        const ctx = this.ctx;
+        const startX = m.wallX;
+        const endX = m.massLeftX;
+        const y = m.massTopY + m.massHeight * 0.72; // 下段
+        const totalSpan = endX - startX;
+
+        ctx.save();
+
+        // シリンダー（外筒）: 壁側に固定
+        const cylinderLen = Math.max(35, Math.min(80, totalSpan * 0.5));
+        const cylinderH = 16;
+        const cylX = startX + 10;
+        const cylY = y - cylinderH * 0.5;
+
+        // 壁からシリンダーへのロッド
+        ctx.strokeStyle = this.colors.damperCylinder;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(startX, y);
+        ctx.lineTo(cylX, y);
+        ctx.stroke();
+
+        // シリンダー外枠
+        ctx.fillStyle = 'rgba(30, 41, 59, 0.8)';
+        ctx.strokeStyle = this.colors.damperCylinder;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(cylX, cylY, cylinderLen, cylinderH);
+        ctx.fillRect(cylX, cylY, cylinderLen, cylinderH);
+
+        // ピストンロッド: マス側からシリンダー内部へ挿入
+        const pistonX = Math.max(cylX + 5, Math.min(cylX + cylinderLen - 5, cylX + (totalSpan * 0.35)));
+
+        ctx.strokeStyle = this.colors.damperPiston;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(endX, y);
+        ctx.lineTo(pistonX, y);
+        ctx.stroke();
+
+        // ピストンヘッド（シリンダー内の板）
+        ctx.fillStyle = this.colors.damperPiston;
+        ctx.fillRect(pistonX - 2, cylY + 2, 4, cylinderH - 4);
+
+        // 減衰係数 D の表示
+        ctx.fillStyle = this.colors.damperPiston;
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`D=${physics.d.toFixed(1)} Ns/m`, cylX + cylinderLen * 0.5, cylY + cylinderH + 12);
+
+        ctx.restore();
+    }
+
+    drawMassBlock(m, physics, isDragging = false) {
+        const ctx = this.ctx;
+        const bx = m.massLeftX;
+        const by = m.massTopY;
+        const bw = m.massWidth;
+        const bh = m.massHeight;
+
+        ctx.save();
+
+        // 車輪（ベアリング 2個）
+        const wheelR = 6;
+        const wheelY = m.floorY - wheelR;
+        ctx.fillStyle = this.colors.wheel;
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 1.5;
+
+        [bx + bw * 0.25, bx + bw * 0.75].forEach(wx => {
+            ctx.beginPath();
+            ctx.arc(wx, wheelY, wheelR, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#38bdf8';
+            ctx.beginPath();
+            ctx.arc(wx, wheelY, 2, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // マス本体ボックス
+        const grad = ctx.createLinearGradient(bx, by, bx, by + bh);
+        if (isDragging) {
+            grad.addColorStop(0, '#fef08a');
+            grad.addColorStop(1, '#ca8a04');
+            ctx.shadowColor = 'rgba(234, 179, 8, 0.6)';
+            ctx.shadowBlur = 18;
+        } else {
+            grad.addColorStop(0, '#38bdf8');
+            grad.addColorStop(0.6, '#0284c7');
+            grad.addColorStop(1, '#0369a1');
+            ctx.shadowColor = this.colors.massGlow;
+            ctx.shadowBlur = 12;
+        }
+
+        ctx.fillStyle = grad;
+        ctx.strokeStyle = isDragging ? '#fef08a' : this.colors.massBorder;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(bx, by, bw, bh, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.shadowBlur = 0;
+
+        // 質量ラベル
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 12px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`m=${physics.m.toFixed(1)}kg`, m.massCenterX, by + bh * 0.5);
+
+        ctx.restore();
+    }
+
+    drawForceVector(m, physics) {
+        const ctx = this.ctx;
+        const f = physics.f;
+        if (Math.abs(f) < 0.1) return;
+
+        const isRight = f > 0;
+        const maxArrowLen = m.massWidth * 1.2;
+        const arrowLen = (Math.abs(f) / physics.fMax) * maxArrowLen;
+
+        const startX = isRight ? m.massRightX : m.massLeftX;
+        const endX = isRight ? (startX + arrowLen) : (startX - arrowLen);
+        const y = m.massTopY + m.massHeight * 0.5;
+
+        ctx.save();
+        ctx.strokeStyle = isRight ? this.colors.forceRight : this.colors.forceLeft;
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+
+        ctx.beginPath();
+        ctx.moveTo(startX, y);
+        ctx.lineTo(endX, y);
+        ctx.stroke();
+
+        // 矢印の先端
+        const headSize = 8;
+        ctx.beginPath();
+        if (isRight) {
+            ctx.moveTo(endX + headSize, y);
+            ctx.lineTo(endX, y - headSize * 0.6);
+            ctx.lineTo(endX, y + headSize * 0.6);
+        } else {
+            ctx.moveTo(endX - headSize, y);
+            ctx.lineTo(endX, y - headSize * 0.6);
+            ctx.lineTo(endX, y + headSize * 0.6);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // 力の数値
+        ctx.font = 'bold 10px monospace';
+        ctx.textAlign = isRight ? 'left' : 'right';
+        ctx.fillText(`F=${Math.abs(f).toFixed(1)}N`, endX + (isRight ? 12 : -12), y - 6);
+
+        ctx.restore();
+    }
+
+    drawHUD(m, physics, stateStatus) {
+        const ctx = this.ctx;
+        ctx.save();
+
+        const isSmallScreen = this.width < 450;
+        const pad = isSmallScreen ? 10 : 16;
+        const hudW = isSmallScreen ? 165 : 210;
+        const hudH = isSmallScreen ? 95 : 120;
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(pad, pad, hudW, hudH, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.font = isSmallScreen ? '10px "Courier New", monospace' : '11px "Courier New", monospace';
+        ctx.fillStyle = this.colors.textMain;
+
+        const xVal = physics.x.toFixed(3);
+        const vVal = physics.v.toFixed(2);
+        const fVal = physics.f.toFixed(2);
+        const errVal = physics.error.toFixed(3);
+        const zetaVal = physics.zeta.toFixed(2);
+        const wnVal = physics.omegaN.toFixed(2);
+
+        const lineStep = isSmallScreen ? 15 : 18;
+        let y = pad + (isSmallScreen ? 15 : 18);
+
+        ctx.fillText(`変位 x : ${xVal} m`, pad + 8, y);
+        y += lineStep;
+        ctx.fillText(`速度 v : ${vVal} m/s`, pad + 8, y);
+        y += lineStep;
+        ctx.fillText(`外力 F : ${fVal} N`, pad + 8, y);
+        y += lineStep;
+        ctx.fillText(`偏差 e : ${errVal} m`, pad + 8, y);
+        y += lineStep;
+        ctx.fillText(`減衰比ζ: ${zetaVal} (${physics.dampingTypeLabel})`, pad + 8, y);
+        if (!isSmallScreen) {
+            y += lineStep;
+            ctx.fillText(`固有ωn : ${wnVal} rad/s`, pad + 8, y);
+        }
+
+        // 整定判定バッジ
+        if (stateStatus.stabilized) {
+            ctx.fillStyle = 'rgba(16, 185, 129, 0.92)';
+            const badgeW = isSmallScreen ? 160 : 200;
+            const badgeH = isSmallScreen ? 34 : 40;
+            ctx.beginPath();
+            ctx.roundRect(this.width / 2 - badgeW / 2, isSmallScreen ? 12 : 20, badgeW, badgeH, 18);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = isSmallScreen ? 'bold 15px sans-serif' : 'bold 17px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('★ STABILIZED! ★', this.width / 2, (isSmallScreen ? 12 : 20) + badgeH / 2);
+        } else if (stateStatus.holdingProgress > 0) {
+            const barW = isSmallScreen ? 140 : 180;
+            const barH = 12;
+            const barX = this.width / 2 - barW / 2;
+            const barY = isSmallScreen ? 20 : 24;
+
+            ctx.fillStyle = 'rgba(30, 41, 59, 0.8)';
+            ctx.beginPath();
+            ctx.roundRect(barX, barY, barW, barH, 6);
+            ctx.fill();
+
+            const fillW = Math.max(0, Math.min(barW, barW * stateStatus.holdingProgress));
+            ctx.fillStyle = '#eab308';
+            ctx.beginPath();
+            ctx.roundRect(barX, barY, fillW, barH, 6);
+            ctx.fill();
+
+            ctx.fillStyle = '#f8fafc';
+            ctx.font = 'bold 10px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(`目標位置キープ... ${(stateStatus.holdingTime).toFixed(1)}s`, this.width / 2, barY - 3);
+        }
+
+        ctx.restore();
+    }
+}
+
+/**
+ * charts.js - 制御工学学習用グラフ（時系列応答＆相平面）
+ * （振子モータ制御系 & マス・バネ・ダンパー系 両対応）
+ */
 
 class ControlCharts {
     /**
@@ -1808,23 +2734,26 @@ class ControlCharts {
 
         this.dpr = window.devicePixelRatio || 1;
 
+        // 現在のシステムモード ('pendulum' | 'msd')
+        this.systemMode = 'pendulum';
+
         // データ履歴バッファ
         this.maxHistory = 400; // 約6〜8秒分のデータ
-        this.history = [];     // { t, thetaDeg, targetDeg, omega, tau }
+        this.history = [];
 
         // 相平面の軌跡履歴
         this.maxPhaseHistory = 300;
-        this.phaseHistory = []; // { thetaDeg, omega }
+        this.phaseHistory = [];
 
         this.colors = {
             bg: '#0f172a',
             grid: '#1e293b',
             axis: '#334155',
             text: '#94a3b8',
-            theta: '#38bdf8',      // 現在角度（シアン）
-            target: '#eab308',     // 目標角度（イエロー破線）
-            torque: '#10b981',     // トルク（エメラルド）
-            omega: '#c084fc',      // 角速度（パープル）
+            signal: '#38bdf8',     // 現在値（角度 θ / 変位 x）
+            target: '#eab308',     // 目標値（θ_ref / x_ref: イエロー破線）
+            control: '#10b981',    // 制御入力（トルク τ / 外力 F: エメラルド）
+            velocity: '#c084fc',   // 速度（角速度 ω / 速度 v: パープル）
             phaseDot: '#38bdf8',
             phaseLine: 'rgba(56, 189, 248, 0.4)'
         };
@@ -1841,13 +2770,19 @@ class ControlCharts {
         }
     }
 
+    setSystemMode(mode) {
+        if (this.systemMode !== mode) {
+            this.systemMode = mode;
+            this.clear();
+        }
+    }
+
     resize() {
         if (this.timeCanvas) {
             let rect = this.timeCanvas.getBoundingClientRect();
             let w = rect.width;
             let h = rect.height;
 
-            // スマホや非表示からの復帰時のゼロチェック・フォールバック
             if (w <= 0 || h <= 0) {
                 const parent = this.timeCanvas.parentElement;
                 if (parent) {
@@ -1892,28 +2827,46 @@ class ControlCharts {
 
     /**
      * 新しいサンプル点を記録
-     * @param {PendulumPhysics} physics 
+     * @param {object} physics 
      */
     addSample(physics) {
-        const item = {
-            t: physics.time,
-            thetaDeg: physics.normalizedThetaDeg,
-            targetDeg: physics.targetAngleDeg,
-            omega: physics.omega,
-            tau: physics.tau
-        };
+        if (this.systemMode === 'pendulum') {
+            const item = {
+                t: physics.time,
+                val: physics.normalizedThetaDeg,
+                target: physics.targetAngleDeg,
+                vel: physics.omega,
+                input: physics.tau,
+                inputMax: physics.tauMax
+            };
 
-        this.history.push(item);
-        if (this.history.length > this.maxHistory) {
-            this.history.shift();
-        }
+            this.history.push(item);
+            if (this.history.length > this.maxHistory) this.history.shift();
 
-        this.phaseHistory.push({
-            thetaDeg: physics.normalizedThetaDeg,
-            omega: physics.omega
-        });
-        if (this.phaseHistory.length > this.maxPhaseHistory) {
-            this.phaseHistory.shift();
+            this.phaseHistory.push({
+                xVal: physics.normalizedThetaDeg,
+                yVal: physics.omega
+            });
+            if (this.phaseHistory.length > this.maxPhaseHistory) this.phaseHistory.shift();
+        } else {
+            // マス・バネ・ダンパー系
+            const item = {
+                t: physics.time,
+                val: physics.x,
+                target: physics.targetX,
+                vel: physics.v,
+                input: physics.f,
+                inputMax: physics.fMax
+            };
+
+            this.history.push(item);
+            if (this.history.length > this.maxHistory) this.history.shift();
+
+            this.phaseHistory.push({
+                xVal: physics.x,
+                yVal: physics.v
+            });
+            if (this.phaseHistory.length > this.maxPhaseHistory) this.phaseHistory.shift();
         }
     }
 
@@ -1924,7 +2877,7 @@ class ControlCharts {
 
     /**
      * 両グラフを更新描画
-     * @param {PendulumPhysics} physics 
+     * @param {object} physics 
      */
     render(physics) {
         this.renderTimeHistory(physics);
@@ -1932,7 +2885,7 @@ class ControlCharts {
     }
 
     /**
-     * 時系列応答グラフ（角度＆目標角度＆トルク）
+     * 時系列応答グラフ
      */
     renderTimeHistory(physics) {
         if (!this.tWidth || this.tWidth < 20 || !this.tHeight || this.tHeight < 20) {
@@ -1946,14 +2899,15 @@ class ControlCharts {
         ctx.fillStyle = this.colors.bg;
         ctx.fillRect(0, 0, w, h);
 
-        const padLeft = 40;
+        const isPendulum = this.systemMode === 'pendulum';
+        const padLeft = isPendulum ? 42 : 46;
         const padRight = 15;
-        const padTop = 20;
-        const padBottom = 25;
+        const padTop = 22;
+        const padBottom = 22;
         const plotW = w - padLeft - padRight;
         const plotH = h - padTop - padBottom;
 
-        // グリッド（-180°, -90°, 0°, 90°, 180°）
+        // グリッド線と目盛りの設定
         ctx.strokeStyle = this.colors.grid;
         ctx.lineWidth = 1;
         ctx.fillStyle = this.colors.text;
@@ -1961,18 +2915,39 @@ class ControlCharts {
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
 
-        const degTicks = [-180, -90, 0, 90, 180];
-        degTicks.forEach(deg => {
-            const y = padTop + plotH * (1.0 - (deg + 180) / 360);
-            ctx.beginPath();
-            ctx.moveTo(padLeft, y);
-            ctx.lineTo(w - padRight, y);
-            ctx.stroke();
-            ctx.fillText(`${deg}°`, padLeft - 6, y);
-        });
+        let zeroY;
+
+        if (isPendulum) {
+            // 振子: -180° 〜 +180°
+            const degTicks = [-180, -90, 0, 90, 180];
+            degTicks.forEach(deg => {
+                const y = padTop + plotH * (1.0 - (deg + 180) / 360);
+                ctx.beginPath();
+                ctx.moveTo(padLeft, y);
+                ctx.lineTo(w - padRight, y);
+                ctx.stroke();
+                ctx.fillText(`${deg}°`, padLeft - 6, y);
+            });
+            zeroY = padTop + plotH * 0.5;
+        } else {
+            // MSD: -1.0m 〜 +1.0m
+            const minX = -1.0;
+            const maxX = 1.0;
+            const mTicks = [-1.0, -0.5, 0.0, 0.5, 1.0];
+            mTicks.forEach(tVal => {
+                const norm = (tVal - minX) / (maxX - minX);
+                const y = padTop + plotH * (1.0 - norm);
+                ctx.beginPath();
+                ctx.moveTo(padLeft, y);
+                ctx.lineTo(w - padRight, y);
+                ctx.stroke();
+                const sign = tVal > 0 ? '+' : '';
+                ctx.fillText(`${sign}${tVal.toFixed(1)}m`, padLeft - 6, y);
+            });
+            zeroY = padTop + plotH * 0.5;
+        }
 
         // ゼロ軸の強調
-        const zeroY = padTop + plotH * 0.5;
         ctx.strokeStyle = this.colors.axis;
         ctx.beginPath();
         ctx.moveTo(padLeft, zeroY);
@@ -1981,16 +2956,16 @@ class ControlCharts {
 
         // 凡例
         ctx.textAlign = 'left';
-        ctx.fillStyle = this.colors.theta;
-        ctx.fillText('― 角度 θ', padLeft + 10, padTop - 8);
+        ctx.fillStyle = this.colors.signal;
+        ctx.fillText(isPendulum ? '― 角度 θ' : '― 変位 x', padLeft + 6, padTop - 8);
         ctx.fillStyle = this.colors.target;
-        ctx.fillText('--- 目標 θ_ref', padLeft + 75, padTop - 8);
-        ctx.fillStyle = this.colors.torque;
-        ctx.fillText('― トルク τ', padLeft + 160, padTop - 8);
+        ctx.fillText(isPendulum ? '--- 目標 θ_ref' : '--- 目標 x_ref', padLeft + (isPendulum ? 72 : 76), padTop - 8);
+        ctx.fillStyle = this.colors.control;
+        ctx.fillText(isPendulum ? '― トルク τ' : '― 入力外力 F', padLeft + (isPendulum ? 160 : 166), padTop - 8);
 
         if (this.history.length < 2) return;
 
-        // 目標値の破線プロット
+        // 1. 目標値の破線プロット
         ctx.save();
         ctx.strokeStyle = this.colors.target;
         ctx.lineWidth = 1.5;
@@ -1999,57 +2974,70 @@ class ControlCharts {
         for (let i = 0; i < this.history.length; i++) {
             const p = this.history[i];
             const x = padLeft + (i / (this.maxHistory - 1)) * plotW;
-            const y = padTop + plotH * (1.0 - (p.targetDeg + 180) / 360);
+            let y;
+            if (isPendulum) {
+                y = padTop + plotH * (1.0 - (p.target + 180) / 360);
+            } else {
+                const norm = (p.target - (-1.0)) / 2.0;
+                y = padTop + plotH * (1.0 - Math.max(0, Math.min(1, norm)));
+            }
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
         }
         ctx.stroke();
         ctx.restore();
 
-        // トルクプロット（スケール: ±tauMax を画面下半分にフィット）
+        // 2. 制御入力（トルク τ / 外力 F）プロット（ゼロ軸中心にスケーリング）
         ctx.save();
-        ctx.strokeStyle = this.colors.torque;
+        ctx.strokeStyle = this.colors.control;
         ctx.lineWidth = 1.2;
         ctx.beginPath();
         for (let i = 0; i < this.history.length; i++) {
             const p = this.history[i];
             const x = padLeft + (i / (this.maxHistory - 1)) * plotW;
-            // トルクは zeroY を中心に ±plotH*0.4 の範囲で描画
-            const tNorm = p.tau / Math.max(0.1, physics.tauMax);
-            const y = zeroY - tNorm * (plotH * 0.35);
+            const inMax = Math.max(0.1, p.inputMax || 10.0);
+            const inNorm = p.input / inMax;
+            const y = zeroY - inNorm * (plotH * 0.35);
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
         }
         ctx.stroke();
         ctx.restore();
 
-        // 角度 θ プロット
+        // 3. 状態量（角度 θ / 変位 x）プロット
         ctx.save();
-        ctx.strokeStyle = this.colors.theta;
+        ctx.strokeStyle = this.colors.signal;
         ctx.lineWidth = 2;
         ctx.beginPath();
-        let prevNorm = null;
+        let prevVal = null;
         for (let i = 0; i < this.history.length; i++) {
             const p = this.history[i];
             const x = padLeft + (i / (this.maxHistory - 1)) * plotW;
-            const y = padTop + plotH * (1.0 - (p.thetaDeg + 180) / 360);
-
-            // 180°と-180°の境界ジャンプ時は線を途切らせる
-            if (prevNorm !== null && Math.abs(p.thetaDeg - prevNorm) > 180) {
-                ctx.moveTo(x, y);
-            } else if (i === 0) {
-                ctx.moveTo(x, y);
+            let y;
+            if (isPendulum) {
+                y = padTop + plotH * (1.0 - (p.val + 180) / 360);
+                // 180°と-180°の境界ジャンプ時は線を途切らせる
+                if (prevVal !== null && Math.abs(p.val - prevVal) > 180) {
+                    ctx.moveTo(x, y);
+                } else if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+                prevVal = p.val;
             } else {
-                ctx.lineTo(x, y);
+                const norm = (p.val - (-1.0)) / 2.0;
+                y = padTop + plotH * (1.0 - Math.max(0, Math.min(1, norm)));
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
             }
-            prevNorm = p.thetaDeg;
         }
         ctx.stroke();
         ctx.restore();
     }
 
     /**
-     * 相平面（Phase Plane: θ vs dθ/dt）プロット
+     * 相平面プロット (Phase Plane)
      */
     renderPhasePlane(physics) {
         if (!this.pWidth || this.pWidth < 20 || !this.pHeight || this.pHeight < 20) {
@@ -2063,6 +3051,7 @@ class ControlCharts {
         ctx.fillStyle = this.colors.bg;
         ctx.fillRect(0, 0, w, h);
 
+        const isPendulum = this.systemMode === 'pendulum';
         const cx = w * 0.5;
         const cy = h * 0.5;
         const plotRadiusX = w * 0.42;
@@ -2072,7 +3061,6 @@ class ControlCharts {
         ctx.strokeStyle = this.colors.grid;
         ctx.lineWidth = 1;
         ctx.beginPath();
-        // 縦横の十字軸
         ctx.moveTo(cx - plotRadiusX, cy); ctx.lineTo(cx + plotRadiusX, cy);
         ctx.moveTo(cx, cy - plotRadiusY); ctx.lineTo(cx, cy + plotRadiusY);
         ctx.stroke();
@@ -2085,20 +3073,38 @@ class ControlCharts {
         ctx.font = '10px monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
-        ctx.fillText('角度 θ ([-180°, 180°])', cx, cy + plotRadiusY + 4);
 
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('角速度 ω [rad/s]', cx - plotRadiusX - 4, cy);
+        if (isPendulum) {
+            ctx.fillText('角度 θ ([-180°, 180°])', cx, cy + plotRadiusY + 4);
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('角速度 ω [rad/s]', cx - plotRadiusX - 4, cy);
+        } else {
+            ctx.fillText('変位 x ([-1.0m, 1.0m])', cx, cy + plotRadiusY + 4);
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('速度 v [m/s]', cx - plotRadiusX - 4, cy);
+        }
 
-        // 角速度の表示レンジ（動的または固定）
-        const maxOmega = Math.max(10, Math.abs(physics.omega) * 1.2);
+        // 速度の表示スケーリングレンジ
+        let maxVel;
+        if (isPendulum) {
+            maxVel = Math.max(10, Math.abs(physics.omega) * 1.2);
+        } else {
+            maxVel = Math.max(2.5, Math.abs(physics.v) * 1.3);
+        }
 
-        // 目標点のマーカー（目標角度, ω=0）
-        const targetX = cx + (physics.targetAngleDeg / 180.0) * plotRadiusX;
+        // 目標点のマーカー（目標位置, 速度=0）
+        let targetXCoord;
+        if (isPendulum) {
+            targetXCoord = cx + (physics.targetAngleDeg / 180.0) * plotRadiusX;
+        } else {
+            targetXCoord = cx + (physics.targetX / 1.0) * plotRadiusX;
+        }
+
         ctx.fillStyle = this.colors.target;
         ctx.beginPath();
-        ctx.arc(targetX, cy, 4, 0, Math.PI * 2);
+        ctx.arc(targetXCoord, cy, 4, 0, Math.PI * 2);
         ctx.fill();
 
         if (this.phaseHistory.length < 2) return;
@@ -2108,28 +3114,38 @@ class ControlCharts {
         ctx.strokeStyle = this.colors.phaseLine;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        let prevDeg = null;
+        let prevXVal = null;
 
         for (let i = 0; i < this.phaseHistory.length; i++) {
             const p = this.phaseHistory[i];
-            const px = cx + (p.thetaDeg / 180.0) * plotRadiusX;
-            const py = cy - (p.omega / maxOmega) * plotRadiusY;
+            let px;
+            if (isPendulum) {
+                px = cx + (p.xVal / 180.0) * plotRadiusX;
+            } else {
+                px = cx + (p.xVal / 1.0) * plotRadiusX;
+            }
+            const py = cy - (p.yVal / maxVel) * plotRadiusY;
 
-            if (prevDeg !== null && Math.abs(p.thetaDeg - prevDeg) > 180) {
+            if (isPendulum && prevXVal !== null && Math.abs(p.xVal - prevXVal) > 180) {
                 ctx.moveTo(px, py);
             } else if (i === 0) {
                 ctx.moveTo(px, py);
             } else {
                 ctx.lineTo(px, py);
             }
-            prevDeg = p.thetaDeg;
+            prevXVal = p.xVal;
         }
         ctx.stroke();
 
         // 最新の現在点
         const currentP = this.phaseHistory[this.phaseHistory.length - 1];
-        const curX = cx + (currentP.thetaDeg / 180.0) * plotRadiusX;
-        const curY = cy - (currentP.omega / maxOmega) * plotRadiusY;
+        let curX;
+        if (isPendulum) {
+            curX = cx + (currentP.xVal / 180.0) * plotRadiusX;
+        } else {
+            curX = cx + (currentP.xVal / 1.0) * plotRadiusX;
+        }
+        const curY = cy - (currentP.yVal / maxVel) * plotRadiusY;
 
         ctx.fillStyle = this.colors.phaseDot;
         ctx.shadowColor = '#38bdf8';
@@ -2159,13 +3175,16 @@ class ControlCharts {
 class PIDController {
     constructor() {
         // デフォルトゲイン設定（標準振子 1m, 1kg の倒立・位置決めに最適化）
-        this.kp = 25.0; // 比例ゲイン [Nm/rad]
-        this.ki = 4.0;  // 積分ゲイン [Nm/(rad*s)]
-        this.kd = 6.0;  // 微分ゲイン [Nm*s/rad]
+        this.kp = 25.0; // 比例ゲイン
+        this.ki = 4.0;  // 積分ゲイン
+        this.kd = 6.0;  // 微分ゲイン
+
+        // 角度モード（true: [-π, π] でラップ, false: 線形偏差）
+        this.angleMode = true;
 
         // 内部状態
         this.integral = 0.0;
-        this.maxIntegral = 8.0; // アンチワインドアップ上限
+        this.maxIntegral = 20.0; // アンチワインドアップ上限
         this.lastError = 0.0;
 
         // 各項の現在値（デバッグ＆表示用）
@@ -2188,21 +3207,22 @@ class PIDController {
     }
 
     /**
-     * トルク出力を計算
-     * @param {number} targetAngleRad 目標角度 [rad]
-     * @param {number} currentAngleRad 現在角度 [rad]
-     * @param {number} omega 現在角速度 [rad/s]
+     * 制御出力を計算
+     * @param {number} target 目標値 (角度 [rad] または 位置 [m])
+     * @param {number} current 現在値 (角度 [rad] または 位置 [m])
+     * @param {number} velocity 現在速度 (角速度 [rad/s] または 速度 [m/s])
      * @param {number} dt サンプリング時間 [s]
-     * @param {number} tauMax 最大トルク [Nm]
-     * @returns {number} 制御出力トルク τ [Nm]
+     * @param {number} maxOutput 最大出力 (トルク [Nm] または 外力 [N])
+     * @returns {number} 制御出力
      */
-    compute(targetAngleRad, currentAngleRad, omega, dt, tauMax) {
+    compute(target, current, velocity, dt, maxOutput) {
         if (dt <= 0) return 0;
 
-        // 1. 最短角度偏差 e ∈ [-π, π]
-        // 正: 目標が反時計回り(CCW)側にある => 正トルクを出して引き上げる
-        // 負: 目標が時計回り(CW)側にある => 負トルクを出して引き戻す
-        const error = PendulumPhysics.normalizeAngle(targetAngleRad - currentAngleRad);
+        // 1. 偏差 e の算出
+        let error = target - current;
+        if (this.angleMode) {
+            error = PendulumPhysics.normalizeAngle(error);
+        }
 
         // 2. P項 (比例)
         this.pTerm = this.kp * error;
@@ -2213,18 +3233,17 @@ class PIDController {
         this.integral = Math.max(-this.maxIntegral, Math.min(this.maxIntegral, this.integral));
         this.iTerm = this.ki * this.integral;
 
-        // 4. D項 (角速度フィードバック: de/dt = -ω)
-        // 角度が増加している時(ω>0)は反対方向のブレーキ(-Kd * ω)をかける
-        this.dTerm = -this.kd * omega;
+        // 4. D項 (速度フィードバック: de/dt = -v)
+        this.dTerm = -this.kd * velocity;
 
         // 5. 合計制御出力
         let u = this.pTerm + this.iTerm + this.dTerm;
 
         // 6. 出力サチュレーション
-        this.output = Math.max(-tauMax, Math.min(tauMax, u));
+        this.output = Math.max(-maxOutput, Math.min(maxOutput, u));
 
-        // トルクが飽和している場合は、積分項の増加を抑止（クランピング式アンチワインドアップ）
-        if ((u > tauMax && error > 0) || (u < -tauMax && error < 0)) {
+        // 出力が飽和している場合は、積分項の増加を抑止（クランピング式アンチワインドアップ）
+        if ((u > maxOutput && error > 0) || (u < -maxOutput && error < 0)) {
             this.integral -= error * dt;
         }
 
@@ -2235,7 +3254,7 @@ class PIDController {
 
 /**
  * app.js - メインアプリケーション制御・イベントハンドリング・ゲームループ
- * （Manual / Auto PID位置制御、アナログスライダー、スワイプ操作対応）
+ * （振子モータ制御系 & マス・バネ・ダンパー系 両対応）
  */
 
 
@@ -2243,10 +3262,24 @@ class PIDController {
 
 
 
-class PendulumApp {
+
+
+class ControlApp {
     constructor() {
+        // 現在アクティブなシステム ('pendulum' | 'msd')
+        this.activeSystem = 'pendulum';
+
+        // 振子系
         this.physics = new PendulumPhysics();
-        this.pid = new PIDController();
+        this.pendulumPid = new PIDController(); // 角度制御用（Wrapあり）
+
+        // マス・バネ・ダンパー系
+        this.msdPhysics = new MassSpringDamperPhysics();
+        this.msdPid = new PIDController();      // 位置制御用（Wrapなし）
+        this.msdPid.angleMode = false;
+        this.msdPid.kp = 30.0;
+        this.msdPid.ki = 12.0;
+        this.msdPid.kd = 8.0;
 
         // Canvas要素
         this.simCanvas = document.getElementById('simCanvas');
@@ -2254,13 +3287,15 @@ class PendulumApp {
         this.phaseCanvas = document.getElementById('phaseCanvas');
 
         this.renderer = new PendulumRenderer(this.simCanvas);
+        this.msdRenderer = new MassSpringDamperRenderer(this.simCanvas);
         this.charts = new ControlCharts(this.timeCanvas, this.phaseCanvas);
 
         // 操作状態
         this.isPaused = false;
-        this.driveMode = 'manual'; // 'manual' (手動操作) | 'auto' (PID位置制御)
-        this.sliderMode = 'spring'; // 'spring' (離すと0復帰) | 'hold' (出力維持)
-        this.appliedTau = 0.0;
+        this.driveMode = 'manual'; // 'manual' | 'auto'
+        this.sliderMode = 'spring'; // 'spring' | 'hold'
+        this.appliedTau = 0.0;      // 振子用モータトルク [Nm]
+        this.appliedForce = 0.0;    // MSD用入力外力 [N]
         this.isSliderDragging = false;
 
         this.keyState = {
@@ -2272,55 +3307,47 @@ class PendulumApp {
         this.keyHoldDurationLeft = 0;
         this.keyHoldDurationRight = 0;
 
-        // 振子おもりのタッチ＆マウスドラッグ状態
+        // タッチ＆マウスドラッグ状態
         this.isDragging = false;
-        this.dragLastAngle = 0;
+        this.dragLastCoord = { x: 0, y: 0 };
         this.dragLastTime = 0;
 
         // 整定判定（ゲーム要素）
         this.holdingTime = 0.0;
         this.requiredHoldTime = 2.0;
         this.stabilized = false;
+
+        // 振子用整定閾値
         this.angleToleranceDeg = 6.0;
         this.omegaTolerance = 0.35;
+
+        // MSD用整定閾値
+        this.posToleranceM = 0.03;
+        this.velToleranceM = 0.06;
 
         // アニメーションループ用タイムスタンプ
         this.lastTimestamp = performance.now();
         this.chartSampleTimer = 0.0;
         this.chartSampleInterval = 0.02;
 
-        // プリセット定義
-        this.presets = {
-            default: {
-                name: '標準設定',
-                l: 1.0, m: 1.0, tauMax: 12.0, c: 0.15, g: 9.8, targetDeg: 180,
-                desc: '倒立振子(180°)を目指す基本構成'
-            },
-            pendulum90: {
-                name: '水平静止 (90°)',
-                l: 1.0, m: 1.0, tauMax: 15.0, c: 0.2, g: 9.8, targetDeg: 90,
-                desc: '重力に対抗して90度でキープする'
-            },
-            lowTorque: {
-                name: 'スイングアップ必須',
-                l: 1.0, m: 1.0, tauMax: 5.0, c: 0.08, g: 9.8, targetDeg: 180,
-                desc: '最大トルク < mgl のため助走が必要'
-            },
-            heavyLong: {
-                name: '長尺・大質量',
-                l: 1.8, m: 2.5, tauMax: 25.0, c: 0.25, g: 9.8, targetDeg: 180,
-                desc: '大きな慣性モーメントの振子'
-            },
-            fastShort: {
-                name: '短尺・高速',
-                l: 0.5, m: 0.5, tauMax: 8.0, c: 0.1, g: 9.8, targetDeg: 180,
-                desc: '素早い反応が求められる機敏な振子'
-            },
-            zeroG: {
-                name: '無重力 (宇宙)',
-                l: 1.0, m: 1.0, tauMax: 6.0, c: 0.05, g: 0.0, targetDeg: 90,
-                desc: '重力のない空間での回転制御'
-            }
+        // 振子プリセット
+        this.pendulumPresets = {
+            default: { l: 1.0, m: 1.0, tauMax: 12.0, c: 0.15, g: 9.8, targetDeg: 180 },
+            pendulum90: { l: 1.0, m: 1.0, tauMax: 15.0, c: 0.2, g: 9.8, targetDeg: 90 },
+            lowTorque: { l: 1.0, m: 1.0, tauMax: 5.0, c: 0.08, g: 9.8, targetDeg: 180 },
+            heavyLong: { l: 1.8, m: 2.5, tauMax: 25.0, c: 0.25, g: 9.8, targetDeg: 180 },
+            fastShort: { l: 0.5, m: 0.5, tauMax: 8.0, c: 0.1, g: 9.8, targetDeg: 180 },
+            zeroG: { l: 1.0, m: 1.0, tauMax: 6.0, c: 0.05, g: 0.0, targetDeg: 90 }
+        };
+
+        // マスバネダンパープリセット
+        this.msdPresets = {
+            underDamped: { m: 1.0, k: 12.0, d: 1.2, fMax: 20.0, targetX: 0.5 },
+            criticallyDamped: { m: 1.0, k: 16.0, d: 8.0, fMax: 25.0, targetX: 0.5 },
+            overDamped: { m: 1.0, k: 9.0, d: 11.0, fMax: 25.0, targetX: 0.5 },
+            undamped: { m: 1.0, k: 12.0, d: 0.0, fMax: 20.0, targetX: 0.5 },
+            heavyStructure: { m: 4.0, k: 36.0, d: 3.0, fMax: 35.0, targetX: 0.4 },
+            stiffFast: { m: 0.5, k: 32.0, d: 2.0, fMax: 25.0, targetX: 0.3 }
         };
 
         this.initDOM();
@@ -2330,13 +3357,43 @@ class PendulumApp {
         this.initMobileTabs();
         this.initShareModal();
         this.updateParamUIFromPhysics();
+        this.updateMSDParamUI();
         this.updatePIDUI();
 
         this.handleResize();
         requestAnimationFrame((t) => this.loop(t));
     }
 
+    get currentPID() {
+        return this.activeSystem === 'pendulum' ? this.pendulumPid : this.msdPid;
+    }
+
     initDOM() {
+        // システム切替ボタン
+        this.btnSysPendulum = document.getElementById('btn-sys-pendulum');
+        this.btnSysMSD = document.getElementById('btn-sys-msd');
+
+        // ヘッダータイトル・各種動的ラベル
+        this.headerTitle = document.getElementById('app-header-title');
+        this.simTitleText = document.getElementById('sim-title-text');
+        this.controlInputLabel = document.getElementById('control-input-label');
+        this.scaleMinLabel = document.getElementById('scale-min-label');
+        this.scaleMaxLabel = document.getElementById('scale-max-label');
+        this.timeChartTitle = document.getElementById('time-chart-title');
+        this.timeChartSub = document.getElementById('time-chart-sub');
+        this.phaseChartTitle = document.getElementById('phase-chart-title');
+        this.phaseChartSub = document.getElementById('phase-chart-sub');
+        this.pidFormulaBadge = document.getElementById('pid-formula-badge');
+
+        // カード・パネル
+        this.cardPendulumParams = document.getElementById('card-pendulum-params');
+        this.cardMSDParams = document.getElementById('card-msd-params');
+        this.cardPendulumPresets = document.getElementById('card-pendulum-presets');
+        this.cardMSDPresets = document.getElementById('card-msd-presets');
+        this.pidPresetsPendulum = document.getElementById('pid-presets-pendulum');
+        this.pidPresetsMSD = document.getElementById('pid-presets-msd');
+
+        // 振子パラメータDOM
         this.inputs = {
             l: document.getElementById('param-l'),
             lVal: document.getElementById('val-l'),
@@ -2350,6 +3407,23 @@ class PendulumApp {
             cVal: document.getElementById('val-c'),
             g: document.getElementById('param-g'),
             gVal: document.getElementById('val-g')
+        };
+
+        // マスバネダンパーパラメータDOM
+        this.msdInputs = {
+            m: document.getElementById('param-msd-m'),
+            mVal: document.getElementById('val-msd-m'),
+            k: document.getElementById('param-msd-k'),
+            kVal: document.getElementById('val-msd-k'),
+            d: document.getElementById('param-msd-d'),
+            dVal: document.getElementById('val-msd-d'),
+            fMax: document.getElementById('param-msd-fMax'),
+            fMaxVal: document.getElementById('val-msd-fMax'),
+            targetX: document.getElementById('param-msd-targetX'),
+            targetXVal: document.getElementById('val-msd-targetX'),
+            calcWn: document.getElementById('calc-msd-wn'),
+            calcZeta: document.getElementById('calc-msd-zeta'),
+            calcDamping: document.getElementById('calc-msd-damping')
         };
 
         // PIDパラメータDOM
@@ -2389,59 +3463,68 @@ class PendulumApp {
     initEvents() {
         window.addEventListener('resize', () => this.handleResize());
 
+        // システム切替
+        if (this.btnSysPendulum) {
+            this.btnSysPendulum.addEventListener('click', () => this.switchSystem('pendulum'));
+        }
+        if (this.btnSysMSD) {
+            this.btnSysMSD.addEventListener('click', () => this.switchSystem('msd'));
+        }
+
         // ドライブモード切替（Manual vs Auto）
-        this.btnDriveManual.addEventListener('click', () => {
-            this.setDriveMode('manual');
-        });
-        this.btnDriveAuto.addEventListener('click', () => {
-            this.setDriveMode('auto');
-        });
+        this.btnDriveManual.addEventListener('click', () => this.setDriveMode('manual'));
+        this.btnDriveAuto.addEventListener('click', () => this.setDriveMode('auto'));
 
         // キーボード操作
         window.addEventListener('keydown', (e) => this.handleKeyDown(e));
         window.addEventListener('keyup', (e) => this.handleKeyUp(e));
 
-        // ニュートラル切断ボタン
+        // ニュートラルゼロ復帰ボタン
         this.btnZero.addEventListener('click', () => {
             if (this.driveMode === 'auto') this.setDriveMode('manual');
             this.appliedTau = 0.0;
+            this.appliedForce = 0.0;
         });
 
         // 微動ボタン
-        const stepVal = 0.5;
         this.btnNudgeLeft.addEventListener('click', () => {
             if (this.driveMode === 'auto') this.setDriveMode('manual');
-            this.appliedTau = Math.min(this.physics.tauMax, this.appliedTau + stepVal);
+            if (this.activeSystem === 'pendulum') {
+                this.appliedTau = Math.min(this.physics.tauMax, this.appliedTau + 0.5);
+            } else {
+                this.appliedForce = Math.max(-this.msdPhysics.fMax, this.appliedForce - 1.0);
+            }
         });
         this.btnNudgeRight.addEventListener('click', () => {
             if (this.driveMode === 'auto') this.setDriveMode('manual');
-            this.appliedTau = Math.max(-this.physics.tauMax, this.appliedTau - stepVal);
+            if (this.activeSystem === 'pendulum') {
+                this.appliedTau = Math.max(-this.physics.tauMax, this.appliedTau - 0.5);
+            } else {
+                this.appliedForce = Math.min(this.msdPhysics.fMax, this.appliedForce + 1.0);
+            }
         });
 
         // スライダー復帰モード切替
-        this.btnSpringMode.addEventListener('click', () => {
-            this.setSliderMode('spring');
-        });
-        this.btnHoldMode.addEventListener('click', () => {
-            this.setSliderMode('hold');
-        });
+        this.btnSpringMode.addEventListener('click', () => this.setSliderMode('spring'));
+        this.btnHoldMode.addEventListener('click', () => this.setSliderMode('hold'));
 
         // マウスホイールによる微調整
         const onWheel = (e) => {
             e.preventDefault();
             if (this.driveMode === 'auto') this.setDriveMode('manual');
-            const delta = -Math.sign(e.deltaY) * (this.physics.tauMax * 0.04);
-            this.appliedTau = Math.max(-this.physics.tauMax, Math.min(this.physics.tauMax, this.appliedTau + delta));
+            if (this.activeSystem === 'pendulum') {
+                const delta = -Math.sign(e.deltaY) * (this.physics.tauMax * 0.04);
+                this.appliedTau = Math.max(-this.physics.tauMax, Math.min(this.physics.tauMax, this.appliedTau + delta));
+            } else {
+                const delta = -Math.sign(e.deltaY) * (this.msdPhysics.fMax * 0.04);
+                this.appliedForce = Math.max(-this.msdPhysics.fMax, Math.min(this.msdPhysics.fMax, this.appliedForce + delta));
+            }
         };
 
-        if (this.sliderArea) {
-            this.sliderArea.addEventListener('wheel', onWheel, { passive: false });
-        }
-        if (this.simCanvas) {
-            this.simCanvas.addEventListener('wheel', onWheel, { passive: false });
-        }
+        if (this.sliderArea) this.sliderArea.addEventListener('wheel', onWheel, { passive: false });
+        if (this.simCanvas) this.simCanvas.addEventListener('wheel', onWheel, { passive: false });
 
-        // シミュレーション一時停止 / 再開
+        // 一時停止 / 再開
         this.btnPause.addEventListener('click', () => {
             this.isPaused = !this.isPaused;
             this.btnPause.textContent = this.isPaused ? '▶ 再開' : '⏸ 一時停止';
@@ -2452,8 +3535,9 @@ class PendulumApp {
             this.resetSimulation();
         });
 
-        // 物理パラメータスライダー
+        // 振子物理パラメータスライダー
         const setupSlider = (slider, valDisplay, key, decimals, unit = '', onChange = null) => {
+            if (!slider) return;
             slider.addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 this.physics[key] = val;
@@ -2472,109 +3556,145 @@ class PendulumApp {
             this.stabilized = false;
         });
 
+        // マスバネダンパー物理パラメータスライダー
+        const setupMSDSlider = (slider, valDisplay, key, decimals, unit = '', onChange = null) => {
+            if (!slider) return;
+            slider.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                this.msdPhysics[key] = val;
+                const sign = (key === 'targetX' && val > 0) ? '+' : '';
+                valDisplay.textContent = `${sign}${val.toFixed(decimals)}${unit}`;
+                this.updateMSDCalculatedProperties();
+                if (onChange) onChange(val);
+            });
+        };
+
+        setupMSDSlider(this.msdInputs.m, this.msdInputs.mVal, 'm', 2, ' kg');
+        setupMSDSlider(this.msdInputs.k, this.msdInputs.kVal, 'k', 1, ' N/m');
+        setupMSDSlider(this.msdInputs.d, this.msdInputs.dVal, 'd', 2, ' Ns/m');
+        setupMSDSlider(this.msdInputs.fMax, this.msdInputs.fMaxVal, 'fMax', 1, ' N');
+        setupMSDSlider(this.msdInputs.targetX, this.msdInputs.targetXVal, 'targetX', 2, ' m', () => {
+            this.holdingTime = 0.0;
+            this.stabilized = false;
+        });
+
         // PIDパラメータスライダー
         if (this.pidInputs.kp) {
             this.pidInputs.kp.addEventListener('input', (e) => {
-                this.pid.kp = parseFloat(e.target.value);
-                this.pidInputs.kpVal.textContent = this.pid.kp.toFixed(1);
+                const pid = this.currentPID;
+                pid.kp = parseFloat(e.target.value);
+                this.pidInputs.kpVal.textContent = pid.kp.toFixed(1);
             });
             this.pidInputs.ki.addEventListener('input', (e) => {
-                this.pid.ki = parseFloat(e.target.value);
-                this.pidInputs.kiVal.textContent = this.pid.ki.toFixed(1);
+                const pid = this.currentPID;
+                pid.ki = parseFloat(e.target.value);
+                this.pidInputs.kiVal.textContent = pid.ki.toFixed(1);
             });
             this.pidInputs.kd.addEventListener('input', (e) => {
-                this.pid.kd = parseFloat(e.target.value);
-                this.pidInputs.kdVal.textContent = this.pid.kd.toFixed(1);
+                const pid = this.currentPID;
+                pid.kd = parseFloat(e.target.value);
+                this.pidInputs.kdVal.textContent = pid.kd.toFixed(1);
             });
         }
+
+        // 振子プリセットボタン
+        document.querySelectorAll('[data-preset]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.applyPendulumPreset(btn.dataset.preset);
+            });
+        });
+
+        // MSDプリセットボタン
+        document.querySelectorAll('[data-preset-msd]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.applyMSDPreset(btn.dataset.presetMsd);
+            });
+        });
 
         // PIDプリセットボタン
         document.querySelectorAll('.btn-pid-preset').forEach(btn => {
             btn.addEventListener('click', () => {
-                this.pid.kp = parseFloat(btn.dataset.kp);
-                this.pid.ki = parseFloat(btn.dataset.ki);
-                this.pid.kd = parseFloat(btn.dataset.kd);
+                const kp = parseFloat(btn.dataset.kp);
+                const ki = parseFloat(btn.dataset.ki);
+                const kd = parseFloat(btn.dataset.kd);
+                const pid = this.currentPID;
+                pid.kp = kp;
+                pid.ki = ki;
+                pid.kd = kd;
                 this.updatePIDUI();
-                this.pid.reset();
-            });
-        });
-
-        // 物理プリセットボタン
-        document.querySelectorAll('.btn-preset').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const key = btn.dataset.preset;
-                this.applyPreset(key);
             });
         });
     }
 
     /**
-     * ドライブモード切替（Manual vs Auto）
+     * システム切替（振子 ⇔ マス・バネ・ダンパー）
      */
+    switchSystem(sysName) {
+        if (this.activeSystem === sysName) return;
+        this.activeSystem = sysName;
+
+        // ボタンのアクティブ状態更新
+        if (this.btnSysPendulum) this.btnSysPendulum.classList.toggle('active', sysName === 'pendulum');
+        if (this.btnSysMSD) this.btnSysMSD.classList.toggle('active', sysName === 'msd');
+
+        // チャートモード更新
+        this.charts.setSystemMode(sysName);
+
+        // UI表示の切替
+        const isPendulum = sysName === 'pendulum';
+
+        if (this.headerTitle) this.headerTitle.textContent = isPendulum ? '振子モータ制御' : 'マス・バネ・ダンパー系制御';
+        if (this.simTitleText) this.simTitleText.textContent = isPendulum ? '振子シミュレーション (360°回転)' : 'マス・バネ・ダンパー系シミュレーション';
+        if (this.controlInputLabel) this.controlInputLabel.textContent = isPendulum ? 'モータ出力:' : '入力外力:';
+        if (this.scaleMinLabel) this.scaleMinLabel.textContent = isPendulum ? '◀ CCW (-100%)' : '◀ 引張 (-100%)';
+        if (this.scaleMaxLabel) this.scaleMaxLabel.textContent = isPendulum ? 'CW (+100%) ▶' : '押出 (+100%) ▶';
+
+        if (this.timeChartTitle) this.timeChartTitle.textContent = isPendulum ? '時系列応答 (Time History)' : '時系列応答 (Time History)';
+        if (this.timeChartSub) this.timeChartSub.textContent = isPendulum ? 'θ・θ_ref・τ' : 'x・x_ref・F';
+        if (this.phaseChartTitle) this.phaseChartTitle.textContent = isPendulum ? '相平面プロット (Phase Plane: θ vs ω)' : '相平面プロット (Phase Plane: x vs v)';
+        if (this.phaseChartSub) this.phaseChartSub.textContent = isPendulum ? '平衡点と状態軌跡' : '平衡点と状態軌跡';
+
+        if (this.pidFormulaBadge) {
+            this.pidFormulaBadge.textContent = isPendulum ? 'τ = Kp·e + Ki·∫e dt - Kd·ω' : 'F = Kp·e + Ki·∫e dt - Kd·v';
+        }
+
+        // カードの表示/非表示
+        if (this.cardPendulumParams) this.cardPendulumParams.style.display = isPendulum ? 'block' : 'none';
+        if (this.cardMSDParams) this.cardMSDParams.style.display = isPendulum ? 'none' : 'block';
+        if (this.cardPendulumPresets) this.cardPendulumPresets.style.display = isPendulum ? 'block' : 'none';
+        if (this.cardMSDPresets) this.cardMSDPresets.style.display = isPendulum ? 'none' : 'block';
+        if (this.pidPresetsPendulum) this.pidPresetsPendulum.style.display = isPendulum ? 'flex' : 'none';
+        if (this.pidPresetsMSD) this.pidPresetsMSD.style.display = isPendulum ? 'none' : 'flex';
+
+        // 入力値とPIDのリセット
+        this.appliedTau = 0.0;
+        this.appliedForce = 0.0;
+        this.isDragging = false;
+        this.holdingTime = 0.0;
+        this.stabilized = false;
+
+        this.updatePIDUI();
+        this.handleResize();
+    }
+
     setDriveMode(mode) {
         this.driveMode = mode;
-        this.btnDriveManual.classList.toggle('active', mode === 'manual');
-        this.btnDriveAuto.classList.toggle('active', mode === 'auto');
+        const isAuto = mode === 'auto';
+        this.btnDriveManual.classList.toggle('active', !isAuto);
+        this.btnDriveAuto.classList.toggle('active', isAuto);
+        this.pidStatusBadge.style.display = isAuto ? 'inline-flex' : 'none';
+        this.manualModeToggles.style.opacity = isAuto ? '0.4' : '1.0';
+        this.manualModeToggles.style.pointerEvents = isAuto ? 'none' : 'auto';
 
-        if (mode === 'auto') {
-            this.pidStatusBadge.style.display = 'inline-flex';
-            this.pid.reset();
+        if (isAuto) {
+            this.pendulumPid.reset();
+            this.msdPid.reset();
         } else {
-            this.pidStatusBadge.style.display = 'none';
+            if (this.sliderMode === 'spring') {
+                this.appliedTau = 0.0;
+                this.appliedForce = 0.0;
+            }
         }
-    }
-
-    /**
-     * インタラクティブ・アナログスライダー（タッチパドル）のイベント処理
-     */
-    initSliderEvents() {
-        if (!this.sliderArea || !this.sliderTrack) return;
-
-        const updateFromPointer = (e) => {
-            const rect = this.sliderTrack.getBoundingClientRect();
-            let p = (e.clientX - rect.left) / rect.width;
-            p = Math.max(0, Math.min(1, p));
-
-            const ratio = (0.5 - p) * 2.0;
-            this.appliedTau = ratio * this.physics.tauMax;
-        };
-
-        const onPointerDown = (e) => {
-            // スライダーを直接操作したら手動モードへ自動移行
-            if (this.driveMode === 'auto') {
-                this.setDriveMode('manual');
-            }
-
-            this.isSliderDragging = true;
-            this.sliderThumb.classList.add('dragging');
-            try {
-                this.sliderArea.setPointerCapture(e.pointerId);
-            } catch (err) {}
-            updateFromPointer(e);
-            e.preventDefault();
-        };
-
-        const onPointerMove = (e) => {
-            if (!this.isSliderDragging) return;
-            updateFromPointer(e);
-            e.preventDefault();
-        };
-
-        const onPointerUp = (e) => {
-            if (this.isSliderDragging) {
-                this.isSliderDragging = false;
-                this.sliderThumb.classList.remove('dragging');
-                try {
-                    this.sliderArea.releasePointerCapture(e.pointerId);
-                } catch (err) {}
-                e.preventDefault();
-            }
-        };
-
-        this.sliderArea.addEventListener('pointerdown', onPointerDown);
-        this.sliderArea.addEventListener('pointermove', onPointerMove);
-        this.sliderArea.addEventListener('pointerup', onPointerUp);
-        this.sliderArea.addEventListener('pointercancel', onPointerUp);
     }
 
     setSliderMode(mode) {
@@ -2583,9 +3703,59 @@ class PendulumApp {
         this.btnHoldMode.classList.toggle('active', mode === 'hold');
     }
 
-    /**
-     * Canvas上のおもりを指・マウスで掴んでドラッグできる操作（外乱実験にも利用可能）
-     */
+    initSliderEvents() {
+        const area = this.sliderArea;
+        if (!area) return;
+
+        const updateFromPointer = (clientX) => {
+            const rect = area.getBoundingClientRect();
+            const posX = Math.max(0, Math.min(rect.width, clientX - rect.left));
+            const norm = (posX / rect.width) * 2.0 - 1.0;
+            const inputVal = Math.max(-1.0, Math.min(1.0, norm));
+
+            if (this.activeSystem === 'pendulum') {
+                this.appliedTau = -inputVal * this.physics.tauMax;
+            } else {
+                this.appliedForce = inputVal * this.msdPhysics.fMax;
+            }
+        };
+
+        const onStart = (e) => {
+            if (this.driveMode === 'auto') this.setDriveMode('manual');
+            this.isSliderDragging = true;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            updateFromPointer(clientX);
+            if (e.cancelable) e.preventDefault();
+        };
+
+        const onMove = (e) => {
+            if (!this.isSliderDragging) return;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            updateFromPointer(clientX);
+            if (e.cancelable) e.preventDefault();
+        };
+
+        const onEnd = (e) => {
+            if (this.isSliderDragging) {
+                this.isSliderDragging = false;
+                if (this.sliderMode === 'spring') {
+                    this.appliedTau = 0.0;
+                    this.appliedForce = 0.0;
+                }
+                if (e.cancelable) e.preventDefault();
+            }
+        };
+
+        area.addEventListener('mousedown', onStart);
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onEnd);
+
+        area.addEventListener('touchstart', onStart, { passive: false });
+        window.addEventListener('touchmove', onMove, { passive: false });
+        window.addEventListener('touchend', onEnd, { passive: false });
+        window.addEventListener('touchcancel', onEnd, { passive: false });
+    }
+
     initDragEvents() {
         const getCanvasCoord = (e) => {
             const rect = this.simCanvas.getBoundingClientRect();
@@ -2599,16 +3769,31 @@ class PendulumApp {
 
         const onStart = (e) => {
             const pos = getCanvasCoord(e);
-            const bobInfo = this.renderer.getBobPosition(this.physics);
 
-            const hitRadius = Math.max(32, bobInfo.radius * 2.0);
-            const dist = Math.hypot(pos.x - bobInfo.x, pos.y - bobInfo.y);
+            if (this.activeSystem === 'pendulum') {
+                const bobInfo = this.renderer.getBobPosition(this.physics);
+                const hitRadius = Math.max(32, bobInfo.radius * 2.0);
+                const dist = Math.hypot(pos.x - bobInfo.x, pos.y - bobInfo.y);
 
-            if (dist <= hitRadius) {
-                this.isDragging = true;
-                this.dragLastAngle = this.physics.theta;
-                this.dragLastTime = performance.now();
-                if (e.cancelable) e.preventDefault();
+                if (dist <= hitRadius) {
+                    this.isDragging = true;
+                    this.dragLastCoord = pos;
+                    this.dragLastTime = performance.now();
+                    if (e.cancelable) e.preventDefault();
+                }
+            } else {
+                // マスバネダンパー系
+                const massInfo = this.msdRenderer.getMassPosition(this.msdPhysics);
+                // マスの矩形範囲（余裕幅 +20px）
+                const insideX = pos.x >= massInfo.left - 20 && pos.x <= massInfo.right + 20;
+                const insideY = pos.y >= massInfo.top - 20 && pos.y <= massInfo.bottom + 20;
+
+                if (insideX && insideY) {
+                    this.isDragging = true;
+                    this.dragLastCoord = pos;
+                    this.dragLastTime = performance.now();
+                    if (e.cancelable) e.preventDefault();
+                }
             }
         };
 
@@ -2617,28 +3802,39 @@ class PendulumApp {
             if (e.cancelable) e.preventDefault();
 
             const pos = getCanvasCoord(e);
-            const metrics = this.renderer.getLayoutMetrics(this.physics);
-
-            const dx = pos.x - metrics.pivotX;
-            const dy = pos.y - metrics.pivotY;
-
-            const targetTheta = Math.atan2(dx, dy);
-            const diff = PendulumPhysics.normalizeAngle(targetTheta - this.physics.theta);
-            this.physics.theta += diff;
-
             const now = performance.now();
-            const dt = (now - this.dragLastTime) / 1000.0;
-            if (dt > 0.005) {
+            const dt = Math.max(0.005, (now - this.dragLastTime) / 1000.0);
+
+            if (this.activeSystem === 'pendulum') {
+                const metrics = this.renderer.getLayoutMetrics(this.physics);
+                const dx = pos.x - metrics.pivotX;
+                const dy = pos.y - metrics.pivotY;
+                const targetTheta = Math.atan2(dx, dy);
+                const diff = PendulumPhysics.normalizeAngle(targetTheta - this.physics.theta);
+                this.physics.theta += diff;
                 this.physics.omega = diff / dt;
-                this.dragLastAngle = this.physics.theta;
-                this.dragLastTime = now;
+            } else {
+                // マスバネダンパー系: マスのX座標を変位に変換
+                const massInfo = this.msdRenderer.getMassPosition(this.msdPhysics);
+                const newX = (pos.x - massInfo.centerX0) / massInfo.scalePxPerMeter;
+                const clampedX = Math.max(-1.0, Math.min(1.2, newX));
+                const dx = clampedX - this.msdPhysics.x;
+                this.msdPhysics.x = clampedX;
+                this.msdPhysics.v = dx / dt;
             }
+
+            this.dragLastCoord = pos;
+            this.dragLastTime = now;
         };
 
         const onEnd = (e) => {
             if (this.isDragging) {
                 this.isDragging = false;
-                this.physics.omega = Math.max(-20, Math.min(20, this.physics.omega));
+                if (this.activeSystem === 'pendulum') {
+                    this.physics.omega = Math.max(-20, Math.min(20, this.physics.omega));
+                } else {
+                    this.msdPhysics.v = Math.max(-10, Math.min(10, this.msdPhysics.v));
+                }
                 if (e.cancelable) e.preventDefault();
             }
         };
@@ -2678,7 +3874,7 @@ class PendulumApp {
             scrollTimeout = setTimeout(() => {
                 scrollTimeout = null;
                 const sections = ['sim', 'charts', 'settings'].map(id => document.getElementById(`tab-${id}`));
-                const scrollPos = window.scrollY + 120;
+                const scrollPos = window.scrollY + 100;
                 for (let i = sections.length - 1; i >= 0; i--) {
                     const sec = sections[i];
                     if (sec && sec.offsetTop <= scrollPos) {
@@ -2706,10 +3902,8 @@ class PendulumApp {
             if (currentUrl.startsWith('file://')) {
                 currentUrl = 'http://localhost:8000';
             }
-
             urlInput.value = currentUrl;
             qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=8&data=${encodeURIComponent(currentUrl)}`;
-
             modal.style.display = 'flex';
         };
 
@@ -2734,8 +3928,9 @@ class PendulumApp {
     }
 
     handleResize() {
-        this.renderer.resize();
-        this.charts.resize();
+        if (this.renderer) this.renderer.resize();
+        if (this.msdRenderer) this.msdRenderer.resize();
+        if (this.charts) this.charts.resize();
     }
 
     handleKeyDown(e) {
@@ -2752,6 +3947,7 @@ class PendulumApp {
         } else if (e.code === 'Space') {
             if (this.driveMode === 'auto') this.setDriveMode('manual');
             this.appliedTau = 0.0;
+            this.appliedForce = 0.0;
             e.preventDefault();
         } else if (e.code === 'KeyR') {
             this.resetSimulation();
@@ -2768,66 +3964,115 @@ class PendulumApp {
     }
 
     /**
-     * トルク値の更新およびスライダー表示の同期（Manual & Auto PID）
+     * トルクまたは入力外力の更新およびスライダーUI同期
      */
-    updateAppliedTorque(dt) {
-        if (this.driveMode === 'auto') {
-            // Autoモード: PIDコントローラによるトルク自動算出
-            const targetRad = this.physics.targetAngleRad;
-            const currentRad = this.physics.theta;
-            const omega = this.physics.omega;
-            const tauPID = this.pid.compute(targetRad, currentRad, omega, dt, this.physics.tauMax);
-            this.appliedTau = tauPID;
-        } else {
-            // Manualモード: キーボード長押しによるスムーズなトルク加減算
-            if (this.keyState.ArrowLeft && !this.keyState.ArrowRight) {
-                this.keyHoldDurationLeft += dt;
-                const rate = Math.min(1.0, this.keyHoldDurationLeft / 0.3);
-                this.appliedTau = Math.min(this.physics.tauMax, this.appliedTau + this.physics.tauMax * dt * 2.2 * (0.3 + 0.7 * rate));
+    updateAppliedInput(dt) {
+        if (this.activeSystem === 'pendulum') {
+            // === 振子系 ===
+            if (this.driveMode === 'auto') {
+                const targetRad = this.physics.targetAngleRad;
+                const currentRad = this.physics.theta;
+                const omega = this.physics.omega;
+                this.appliedTau = this.pendulumPid.compute(targetRad, currentRad, omega, dt, this.physics.tauMax);
             } else {
-                this.keyHoldDurationLeft = 0;
-            }
+                if (this.keyState.ArrowLeft && !this.keyState.ArrowRight) {
+                    this.keyHoldDurationLeft += dt;
+                    const rate = Math.min(1.0, this.keyHoldDurationLeft / 0.3);
+                    this.appliedTau = Math.min(this.physics.tauMax, this.appliedTau + this.physics.tauMax * dt * 2.2 * (0.3 + 0.7 * rate));
+                } else {
+                    this.keyHoldDurationLeft = 0;
+                }
 
-            if (this.keyState.ArrowRight && !this.keyState.ArrowLeft) {
-                this.keyHoldDurationRight += dt;
-                const rate = Math.min(1.0, this.keyHoldDurationRight / 0.3);
-                this.appliedTau = Math.max(-this.physics.tauMax, this.appliedTau - this.physics.tauMax * dt * 2.2 * (0.3 + 0.7 * rate));
-            } else {
-                this.keyHoldDurationRight = 0;
-            }
+                if (this.keyState.ArrowRight && !this.keyState.ArrowLeft) {
+                    this.keyHoldDurationRight += dt;
+                    const rate = Math.min(1.0, this.keyHoldDurationRight / 0.3);
+                    this.appliedTau = Math.max(-this.physics.tauMax, this.appliedTau - this.physics.tauMax * dt * 2.2 * (0.3 + 0.7 * rate));
+                } else {
+                    this.keyHoldDurationRight = 0;
+                }
 
-            // スプリング復帰モード時の自動センタリング（離したときスッと0に戻る）
-            if (this.sliderMode === 'spring' && !this.isSliderDragging && !this.keyState.ArrowLeft && !this.keyState.ArrowRight) {
-                this.appliedTau += (0 - this.appliedTau) * Math.min(1.0, dt * 10.0);
-                if (Math.abs(this.appliedTau) < 0.005) {
-                    this.appliedTau = 0.0;
+                if (this.sliderMode === 'spring' && !this.isSliderDragging && !this.keyState.ArrowLeft && !this.keyState.ArrowRight) {
+                    this.appliedTau += (0 - this.appliedTau) * Math.min(1.0, dt * 10.0);
+                    if (Math.abs(this.appliedTau) < 0.005) this.appliedTau = 0.0;
                 }
             }
-        }
 
-        // スライダーUIと数値バッジの同期描画（PID動作中もノブがリアルタイムに駆動）
-        const tauMax = Math.max(0.1, this.physics.tauMax);
-        const ratio = Math.max(-1.0, Math.min(1.0, this.appliedTau / tauMax));
+            // スライダー表示同期
+            const maxVal = Math.max(0.1, this.physics.tauMax);
+            const ratio = Math.max(-1.0, Math.min(1.0, this.appliedTau / maxVal));
+            const thumbPosPercent = (0.5 - ratio * 0.5) * 100;
+            this.sliderThumb.style.left = `${thumbPosPercent}%`;
 
-        const thumbPosPercent = (0.5 - ratio * 0.5) * 100;
-        this.sliderThumb.style.left = `${thumbPosPercent}%`;
+            if (ratio >= 0) {
+                const width = ratio * 50;
+                this.gaugeFill.className = 'gauge-fill ccw';
+                this.gaugeFill.style.left = `${50 - width}%`;
+                this.gaugeFill.style.width = `${width}%`;
+                this.torqueText.className = ratio > 0.01 ? 'torque-val-badge ccw' : 'torque-val-badge';
+            } else {
+                const width = Math.abs(ratio) * 50;
+                this.gaugeFill.className = 'gauge-fill cw';
+                this.gaugeFill.style.left = '50%';
+                this.gaugeFill.style.width = `${width}%`;
+                this.torqueText.className = 'torque-val-badge cw';
+            }
 
-        if (ratio >= 0) {
-            const width = ratio * 50;
-            this.gaugeFill.className = 'gauge-fill ccw';
-            this.gaugeFill.style.left = `${50 - width}%`;
-            this.gaugeFill.style.width = `${width}%`;
-            this.torqueText.className = ratio > 0.01 ? 'torque-val-badge ccw' : 'torque-val-badge';
+            const sign = this.appliedTau > 0 ? '+' : '';
+            this.torqueText.textContent = `${sign}${this.appliedTau.toFixed(2)} Nm (${sign}${(ratio * 100).toFixed(0)}%)`;
+
         } else {
-            const width = Math.abs(ratio) * 50;
-            this.gaugeFill.className = 'gauge-fill cw';
-            this.gaugeFill.style.left = '50%';
-            this.gaugeFill.style.width = `${width}%`;
-            this.torqueText.className = 'torque-val-badge cw';
-        }
+            // === マス・バネ・ダンパー系 ===
+            if (this.driveMode === 'auto') {
+                const targetX = this.msdPhysics.targetX;
+                const currentX = this.msdPhysics.x;
+                const vel = this.msdPhysics.v;
+                this.appliedForce = this.msdPid.compute(targetX, currentX, vel, dt, this.msdPhysics.fMax);
+            } else {
+                if (this.keyState.ArrowLeft && !this.keyState.ArrowRight) {
+                    this.keyHoldDurationLeft += dt;
+                    const rate = Math.min(1.0, this.keyHoldDurationLeft / 0.3);
+                    this.appliedForce = Math.max(-this.msdPhysics.fMax, this.appliedForce - this.msdPhysics.fMax * dt * 2.2 * (0.3 + 0.7 * rate));
+                } else {
+                    this.keyHoldDurationLeft = 0;
+                }
 
-        const sign = this.appliedTau > 0 ? '+' : '';
-        this.torqueText.textContent = `${sign}${this.appliedTau.toFixed(2)} Nm (${sign}${(ratio * 100).toFixed(0)}%)`;
+                if (this.keyState.ArrowRight && !this.keyState.ArrowLeft) {
+                    this.keyHoldDurationRight += dt;
+                    const rate = Math.min(1.0, this.keyHoldDurationRight / 0.3);
+                    this.appliedForce = Math.min(this.msdPhysics.fMax, this.appliedForce + this.msdPhysics.fMax * dt * 2.2 * (0.3 + 0.7 * rate));
+                } else {
+                    this.keyHoldDurationRight = 0;
+                }
+
+                if (this.sliderMode === 'spring' && !this.isSliderDragging && !this.keyState.ArrowLeft && !this.keyState.ArrowRight) {
+                    this.appliedForce += (0 - this.appliedForce) * Math.min(1.0, dt * 10.0);
+                    if (Math.abs(this.appliedForce) < 0.005) this.appliedForce = 0.0;
+                }
+            }
+
+            // スライダー表示同期 (右方向がプラス)
+            const maxVal = Math.max(0.1, this.msdPhysics.fMax);
+            const ratio = Math.max(-1.0, Math.min(1.0, this.appliedForce / maxVal));
+            const thumbPosPercent = (0.5 + ratio * 0.5) * 100;
+            this.sliderThumb.style.left = `${thumbPosPercent}%`;
+
+            if (ratio >= 0) {
+                const width = ratio * 50;
+                this.gaugeFill.className = 'gauge-fill cw'; // 右向き (プラス)
+                this.gaugeFill.style.left = '50%';
+                this.gaugeFill.style.width = `${width}%`;
+                this.torqueText.className = ratio > 0.01 ? 'torque-val-badge cw' : 'torque-val-badge';
+            } else {
+                const width = Math.abs(ratio) * 50;
+                this.gaugeFill.className = 'gauge-fill ccw'; // 左向き (マイナス)
+                this.gaugeFill.style.left = `${50 - width}%`;
+                this.gaugeFill.style.width = `${width}%`;
+                this.torqueText.className = 'torque-val-badge ccw';
+            }
+
+            const sign = this.appliedForce > 0 ? '+' : '';
+            this.torqueText.textContent = `${sign}${this.appliedForce.toFixed(2)} N (${sign}${(ratio * 100).toFixed(0)}%)`;
+        }
     }
 
     updateStabilization(dt) {
@@ -2837,10 +4082,19 @@ class PendulumApp {
             return;
         }
 
-        const errDeg = Math.abs(this.physics.angleErrorDeg);
-        const omega = Math.abs(this.physics.omega);
+        let isWithin = false;
 
-        if (errDeg <= this.angleToleranceDeg && omega <= this.omegaTolerance) {
+        if (this.activeSystem === 'pendulum') {
+            const errDeg = Math.abs(this.physics.angleErrorDeg);
+            const omega = Math.abs(this.physics.omega);
+            isWithin = errDeg <= this.angleToleranceDeg && omega <= this.omegaTolerance;
+        } else {
+            const errM = Math.abs(this.msdPhysics.error);
+            const vel = Math.abs(this.msdPhysics.v);
+            isWithin = errM <= this.posToleranceM && vel <= this.velToleranceM;
+        }
+
+        if (isWithin) {
             this.holdingTime += dt;
             if (this.holdingTime >= this.requiredHoldTime) {
                 this.stabilized = true;
@@ -2854,16 +4108,22 @@ class PendulumApp {
     }
 
     resetSimulation() {
-        this.physics.reset(0, 0);
-        this.pid.reset();
+        if (this.activeSystem === 'pendulum') {
+            this.physics.reset(0, 0);
+            this.pendulumPid.reset();
+            this.appliedTau = 0.0;
+        } else {
+            this.msdPhysics.reset(0, 0);
+            this.msdPid.reset();
+            this.appliedForce = 0.0;
+        }
         this.charts.clear();
-        this.appliedTau = 0.0;
         this.holdingTime = 0.0;
         this.stabilized = false;
     }
 
-    applyPreset(presetKey) {
-        const p = this.presets[presetKey];
+    applyPendulumPreset(presetKey) {
+        const p = this.pendulumPresets[presetKey];
         if (!p) return;
 
         this.physics.l = p.l;
@@ -2877,7 +4137,22 @@ class PendulumApp {
         this.resetSimulation();
     }
 
+    applyMSDPreset(presetKey) {
+        const p = this.msdPresets[presetKey];
+        if (!p) return;
+
+        this.msdPhysics.m = p.m;
+        this.msdPhysics.k = p.k;
+        this.msdPhysics.d = p.d;
+        this.msdPhysics.fMax = p.fMax;
+        this.msdPhysics.targetX = p.targetX;
+
+        this.updateMSDParamUI();
+        this.resetSimulation();
+    }
+
     updateParamUIFromPhysics() {
+        if (!this.inputs.l) return;
         this.inputs.l.value = this.physics.l;
         this.inputs.lVal.textContent = this.physics.l.toFixed(2) + ' m';
 
@@ -2897,16 +4172,45 @@ class PendulumApp {
         this.inputs.targetDegVal.textContent = this.physics.targetAngleDeg.toFixed(0) + '°';
     }
 
+    updateMSDParamUI() {
+        if (!this.msdInputs.m) return;
+        this.msdInputs.m.value = this.msdPhysics.m;
+        this.msdInputs.mVal.textContent = this.msdPhysics.m.toFixed(2) + ' kg';
+
+        this.msdInputs.k.value = this.msdPhysics.k;
+        this.msdInputs.kVal.textContent = this.msdPhysics.k.toFixed(1) + ' N/m';
+
+        this.msdInputs.d.value = this.msdPhysics.d;
+        this.msdInputs.dVal.textContent = this.msdPhysics.d.toFixed(2) + ' Ns/m';
+
+        this.msdInputs.fMax.value = this.msdPhysics.fMax;
+        this.msdInputs.fMaxVal.textContent = this.msdPhysics.fMax.toFixed(1) + ' N';
+
+        this.msdInputs.targetX.value = this.msdPhysics.targetX;
+        const sign = this.msdPhysics.targetX > 0 ? '+' : '';
+        this.msdInputs.targetXVal.textContent = `${sign}${this.msdPhysics.targetX.toFixed(2)} m`;
+
+        this.updateMSDCalculatedProperties();
+    }
+
+    updateMSDCalculatedProperties() {
+        if (!this.msdInputs.calcWn) return;
+        this.msdInputs.calcWn.textContent = this.msdPhysics.omegaN.toFixed(2);
+        this.msdInputs.calcZeta.textContent = this.msdPhysics.zeta.toFixed(2);
+        this.msdInputs.calcDamping.textContent = this.msdPhysics.dampingTypeLabel;
+    }
+
     updatePIDUI() {
         if (!this.pidInputs.kp) return;
-        this.pidInputs.kp.value = this.pid.kp;
-        this.pidInputs.kpVal.textContent = this.pid.kp.toFixed(1);
+        const pid = this.currentPID;
+        this.pidInputs.kp.value = pid.kp;
+        this.pidInputs.kpVal.textContent = pid.kp.toFixed(1);
 
-        this.pidInputs.ki.value = this.pid.ki;
-        this.pidInputs.kiVal.textContent = this.pid.ki.toFixed(1);
+        this.pidInputs.ki.value = pid.ki;
+        this.pidInputs.kiVal.textContent = pid.ki.toFixed(1);
 
-        this.pidInputs.kd.value = this.pid.kd;
-        this.pidInputs.kdVal.textContent = this.pid.kd.toFixed(1);
+        this.pidInputs.kd.value = pid.kd;
+        this.pidInputs.kdVal.textContent = pid.kd.toFixed(1);
     }
 
     loop(timestamp) {
@@ -2916,17 +4220,27 @@ class PendulumApp {
         const dt = Math.min(elapsed, 0.05);
 
         if (!this.isPaused && dt > 0) {
-            this.updateAppliedTorque(dt);
+            this.updateAppliedInput(dt);
 
-            if (!this.isDragging) {
-                this.physics.update(dt, this.appliedTau);
+            if (this.activeSystem === 'pendulum') {
+                if (!this.isDragging) {
+                    this.physics.update(dt, this.appliedTau);
+                }
+            } else {
+                if (!this.isDragging) {
+                    this.msdPhysics.update(dt, this.appliedForce);
+                }
             }
 
             this.updateStabilization(dt);
 
             this.chartSampleTimer += dt;
             if (this.chartSampleTimer >= this.chartSampleInterval) {
-                this.charts.addSample(this.physics);
+                if (this.activeSystem === 'pendulum') {
+                    this.charts.addSample(this.physics);
+                } else {
+                    this.charts.addSample(this.msdPhysics);
+                }
                 this.chartSampleTimer = 0.0;
             }
         }
@@ -2938,15 +4252,20 @@ class PendulumApp {
             isDragging: this.isDragging
         };
 
-        this.renderer.draw(this.physics, status);
-        this.charts.render(this.physics);
+        if (this.activeSystem === 'pendulum') {
+            this.renderer.draw(this.physics, status);
+            this.charts.render(this.physics);
+        } else {
+            this.msdRenderer.draw(this.msdPhysics, status);
+            this.charts.render(this.msdPhysics);
+        }
 
         requestAnimationFrame((t) => this.loop(t));
     }
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-    window.app = new PendulumApp();
+    window.app = new ControlApp();
 });
 
 </script>
