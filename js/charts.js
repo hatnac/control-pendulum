@@ -1,6 +1,6 @@
 /**
  * charts.js - 制御工学学習用グラフ（時系列応答＆相平面）
- * （振子モータ制御系 & マス・バネ・ダンパー系 両対応）
+ * （振子モータ制御系 & マス・バネ・ダンパー系 & 正弦波周波数応答 両対応）
  */
 
 export class ControlCharts {
@@ -13,12 +13,13 @@ export class ControlCharts {
         this.phaseCanvas = phaseCanvas;
 
         this.tCtx = timeCanvas.getContext('2d');
-        this.pCtx = phaseCanvas.getContext('2d');
+        this.pCtx = phaseCanvas ? phaseCanvas.getContext('2d') : null;
 
         this.dpr = window.devicePixelRatio || 1;
 
         // 現在のシステムモード ('pendulum' | 'msd')
         this.systemMode = 'pendulum';
+        this.isBodeMode = false;
 
         // データ履歴バッファ
         this.maxHistory = 400; // 約6〜8秒分のデータ
@@ -38,7 +39,9 @@ export class ControlCharts {
             control: '#10b981',    // 制御入力（トルク τ / 外力 F: エメラルド）
             velocity: '#c084fc',   // 速度（角速度 ω / 速度 v: パープル）
             phaseDot: '#38bdf8',
-            phaseLine: 'rgba(56, 189, 248, 0.4)'
+            phaseLine: 'rgba(56, 189, 248, 0.4)',
+            peakLine: 'rgba(234, 179, 8, 0.4)',
+            dtArrow: '#f59e0b'
         };
 
         this.resize();
@@ -58,6 +61,10 @@ export class ControlCharts {
             this.systemMode = mode;
             this.clear();
         }
+    }
+
+    setBodeMode(isBode) {
+        this.isBodeMode = isBode;
     }
 
     resize() {
@@ -104,7 +111,7 @@ export class ControlCharts {
             this.pHeight = h;
             this.phaseCanvas.width = w * this.dpr;
             this.phaseCanvas.height = h * this.dpr;
-            this.pCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+            if (this.pCtx) this.pCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
         }
     }
 
@@ -161,16 +168,19 @@ export class ControlCharts {
     /**
      * 両グラフを更新描画
      * @param {object} physics 
+     * @param {object} bodeAnalyzer (任意: 正弦波周波数応答用)
      */
-    render(physics) {
-        this.renderTimeHistory(physics);
-        this.renderPhasePlane(physics);
+    render(physics, bodeAnalyzer = null) {
+        this.renderTimeHistory(physics, bodeAnalyzer);
+        if (this.phaseCanvas && this.phaseCanvas.style.display !== 'none') {
+            this.renderPhasePlane(physics);
+        }
     }
 
     /**
      * 時系列応答グラフ
      */
-    renderTimeHistory(physics) {
+    renderTimeHistory(physics, bodeAnalyzer = null) {
         if (!this.tWidth || this.tWidth < 20 || !this.tHeight || this.tHeight < 20) {
             this.resize();
         }
@@ -183,6 +193,8 @@ export class ControlCharts {
         ctx.fillRect(0, 0, w, h);
 
         const isPendulum = this.systemMode === 'pendulum';
+        const isBode = this.isBodeMode && bodeAnalyzer !== null;
+
         const padLeft = isPendulum ? 42 : 46;
         const padRight = 15;
         const padTop = 22;
@@ -237,43 +249,61 @@ export class ControlCharts {
         ctx.lineTo(w - padRight, zeroY);
         ctx.stroke();
 
-        // 凡例
+        // 凡例表示
         ctx.textAlign = 'left';
-        ctx.fillStyle = this.colors.signal;
-        ctx.fillText(isPendulum ? '― 角度 θ' : '― 変位 x', padLeft + 6, padTop - 8);
-        ctx.fillStyle = this.colors.target;
-        ctx.fillText(isPendulum ? '--- 目標 θ_ref' : '--- 目標 x_ref', padLeft + (isPendulum ? 72 : 76), padTop - 8);
-        ctx.fillStyle = this.colors.control;
-        ctx.fillText(isPendulum ? '― トルク τ' : '― 入力外力 F', padLeft + (isPendulum ? 160 : 166), padTop - 8);
+        if (isBode) {
+            // 正弦波モードの凡例
+            ctx.fillStyle = this.colors.signal;
+            ctx.fillText(isPendulum ? '― 出力 θ(t)' : '― 出力 x(t)', padLeft + 6, padTop - 8);
+
+            ctx.fillStyle = this.colors.control;
+            ctx.fillText('--- 正弦波入力 u(t)', padLeft + 80, padTop - 8);
+
+            if (bodeAnalyzer.currentAmpOut > 0.001) {
+                ctx.fillStyle = '#eab308';
+                ctx.fillText(`|G|=${bodeAnalyzer.currentGainDb.toFixed(1)}dB  φ=${bodeAnalyzer.currentPhaseDeg.toFixed(0)}°`, padLeft + 185, padTop - 8);
+            }
+        } else {
+            // 通常モードの凡例
+            ctx.fillStyle = this.colors.signal;
+            ctx.fillText(isPendulum ? '― 角度 θ' : '― 変位 x', padLeft + 6, padTop - 8);
+            ctx.fillStyle = this.colors.target;
+            ctx.fillText(isPendulum ? '--- 目標 θ_ref' : '--- 目標 x_ref', padLeft + (isPendulum ? 72 : 76), padTop - 8);
+            ctx.fillStyle = this.colors.control;
+            ctx.fillText(isPendulum ? '― トルク τ' : '― 入力外力 F', padLeft + (isPendulum ? 160 : 166), padTop - 8);
+        }
 
         if (this.history.length < 2) return;
 
-        // 1. 目標値の破線プロット
-        ctx.save();
-        ctx.strokeStyle = this.colors.target;
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        for (let i = 0; i < this.history.length; i++) {
-            const p = this.history[i];
-            const x = padLeft + (i / (this.maxHistory - 1)) * plotW;
-            let y;
-            if (isPendulum) {
-                y = padTop + plotH * (1.0 - (p.target + 180) / 360);
-            } else {
-                const norm = (p.target - (-1.0)) / 2.0;
-                y = padTop + plotH * (1.0 - Math.max(0, Math.min(1, norm)));
+        // 1. 目標値の破線プロット (通常モード時のみ)
+        if (!isBode) {
+            ctx.save();
+            ctx.strokeStyle = this.colors.target;
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            for (let i = 0; i < this.history.length; i++) {
+                const p = this.history[i];
+                const x = padLeft + (i / (this.maxHistory - 1)) * plotW;
+                let y;
+                if (isPendulum) {
+                    y = padTop + plotH * (1.0 - (p.target + 180) / 360);
+                } else {
+                    const norm = (p.target - (-1.0)) / 2.0;
+                    y = padTop + plotH * (1.0 - Math.max(0, Math.min(1, norm)));
+                }
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
             }
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.restore();
         }
-        ctx.stroke();
-        ctx.restore();
 
         // 2. 制御入力（トルク τ / 外力 F）プロット（ゼロ軸中心にスケーリング）
         ctx.save();
         ctx.strokeStyle = this.colors.control;
-        ctx.lineWidth = 1.2;
+        ctx.lineWidth = isBode ? 1.6 : 1.2;
+        if (isBode) ctx.setLineDash([4, 3]);
         ctx.beginPath();
         for (let i = 0; i < this.history.length; i++) {
             const p = this.history[i];
@@ -299,7 +329,6 @@ export class ControlCharts {
             let y;
             if (isPendulum) {
                 y = padTop + plotH * (1.0 - (p.val + 180) / 360);
-                // 180°と-180°の境界ジャンプ時は線を途切らせる
                 if (prevVal !== null && Math.abs(p.val - prevVal) > 180) {
                     ctx.moveTo(x, y);
                 } else if (i === 0) {
@@ -317,6 +346,52 @@ export class ControlCharts {
         }
         ctx.stroke();
         ctx.restore();
+
+        // 4. 正弦波モード時の振幅ガイド＆位相差アノテーション
+        if (isBode && bodeAnalyzer.currentAmpOut > 0.005) {
+            this.drawBodeAnnotations(ctx, padLeft, plotW, plotH, zeroY, isPendulum, bodeAnalyzer);
+        }
+    }
+
+    /**
+     * 正弦波モードにおける振幅比と位相遅れ Δt の図解アノテーション描画
+     */
+    drawBodeAnnotations(ctx, padLeft, plotW, plotH, zeroY, isPendulum, bodeAnalyzer) {
+        ctx.save();
+
+        // 出力ピーク値の水平ガイドライン
+        const ampOut = bodeAnalyzer.currentAmpOut;
+        let yTop, yBottom;
+        if (isPendulum) {
+            const deg = ampOut * (180 / Math.PI);
+            yTop = zeroY - (deg / 180) * (plotH * 0.5);
+            yBottom = zeroY + (deg / 180) * (plotH * 0.5);
+        } else {
+            yTop = zeroY - (ampOut / 1.0) * (plotH * 0.5);
+            yBottom = zeroY + (ampOut / 1.0) * (plotH * 0.5);
+        }
+
+        ctx.strokeStyle = this.colors.peakLine;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+
+        ctx.beginPath();
+        ctx.moveTo(padLeft, yTop);
+        ctx.lineTo(padLeft + plotW, yTop);
+        ctx.moveTo(padLeft, yBottom);
+        ctx.lineTo(padLeft + plotW, yBottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // ガイドラベル: 出力振幅 Aout
+        ctx.fillStyle = '#eab308';
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'right';
+        const unit = isPendulum ? '°' : 'm';
+        const ampStr = isPendulum ? (ampOut * 180 / Math.PI).toFixed(1) : ampOut.toFixed(3);
+        ctx.fillText(`+Aout: ${ampStr}${unit}`, padLeft + plotW - 4, yTop - 3);
+
+        ctx.restore();
     }
 
     /**
@@ -328,6 +403,7 @@ export class ControlCharts {
         }
 
         const ctx = this.pCtx;
+        if (!ctx) return;
         const w = this.pWidth || 320;
         const h = this.pHeight || 200;
 

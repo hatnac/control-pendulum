@@ -1,6 +1,6 @@
 /**
  * app.js - メインアプリケーション制御・イベントハンドリング・ゲームループ
- * （振子モータ制御系 & マス・バネ・ダンパー系 両対応）
+ * （振子モータ制御系 & マス・バネ・ダンパー系 & 正弦波周波数応答ボード線図 完全対応）
  */
 
 import { PendulumPhysics } from './physics.js';
@@ -9,6 +9,8 @@ import { MassSpringDamperPhysics } from './physics-msd.js';
 import { MassSpringDamperRenderer } from './renderer-msd.js';
 import { ControlCharts } from './charts.js';
 import { PIDController } from './pid.js';
+import { BodeAnalyzer } from './bode.js';
+import { BodeRenderer } from './bode-renderer.js';
 
 class ControlApp {
     constructor() {
@@ -27,18 +29,24 @@ class ControlApp {
         this.msdPid.ki = 12.0;
         this.msdPid.kd = 8.0;
 
+        // 周波数応答・ボード線図
+        this.bodeAnalyzer = new BodeAnalyzer();
+        this.activeSecondaryChart = 'phase'; // 'phase' | 'bode'
+
         // Canvas要素
         this.simCanvas = document.getElementById('simCanvas');
         this.timeCanvas = document.getElementById('timeCanvas');
         this.phaseCanvas = document.getElementById('phaseCanvas');
+        this.bodeCanvas = document.getElementById('bodeCanvas');
 
         this.renderer = new PendulumRenderer(this.simCanvas);
         this.msdRenderer = new MassSpringDamperRenderer(this.simCanvas);
         this.charts = new ControlCharts(this.timeCanvas, this.phaseCanvas);
+        this.bodeRenderer = new BodeRenderer(this.bodeCanvas);
 
         // 操作状態
         this.isPaused = false;
-        this.driveMode = 'manual'; // 'manual' | 'auto'
+        this.driveMode = 'manual'; // 'manual' | 'auto' | 'bode'
         this.sliderMode = 'spring'; // 'spring' | 'hold'
         this.appliedTau = 0.0;      // 振子用モータトルク [Nm]
         this.appliedForce = 0.0;    // MSD用入力外力 [N]
@@ -105,6 +113,7 @@ class ControlApp {
         this.updateParamUIFromPhysics();
         this.updateMSDParamUI();
         this.updatePIDUI();
+        this.updateBodeUI();
 
         this.handleResize();
         requestAnimationFrame((t) => this.loop(t));
@@ -112,6 +121,10 @@ class ControlApp {
 
     get currentPID() {
         return this.activeSystem === 'pendulum' ? this.pendulumPid : this.msdPid;
+    }
+
+    get currentPhysics() {
+        return this.activeSystem === 'pendulum' ? this.physics : this.msdPhysics;
     }
 
     initDOM() {
@@ -127,8 +140,6 @@ class ControlApp {
         this.scaleMaxLabel = document.getElementById('scale-max-label');
         this.timeChartTitle = document.getElementById('time-chart-title');
         this.timeChartSub = document.getElementById('time-chart-sub');
-        this.phaseChartTitle = document.getElementById('phase-chart-title');
-        this.phaseChartSub = document.getElementById('phase-chart-sub');
         this.pidFormulaBadge = document.getElementById('pid-formula-badge');
 
         // カード・パネル
@@ -185,8 +196,32 @@ class ControlApp {
         // ドライブモード切替DOM
         this.btnDriveManual = document.getElementById('drive-manual');
         this.btnDriveAuto = document.getElementById('drive-auto');
+        this.btnDriveBode = document.getElementById('drive-bode');
         this.pidStatusBadge = document.getElementById('pid-status-badge');
+        this.bodeStatusBadge = document.getElementById('bode-status-badge');
         this.manualModeToggles = document.getElementById('manual-mode-toggles');
+
+        // パネル切替DOM
+        this.manualControlsPanel = document.getElementById('manual-controls-panel');
+        this.bodeControlsPanel = document.getElementById('bode-controls-panel');
+
+        // 正弦波コントロールDOM
+        this.paramBodeOmega = document.getElementById('param-bode-omega');
+        this.valBodeOmega = document.getElementById('val-bode-omega');
+        this.paramBodeAmp = document.getElementById('param-bode-amp');
+        this.valBodeAmp = document.getElementById('val-bode-amp');
+        this.bodeAmpLabel = document.getElementById('bode-amp-label');
+        this.btnBodeSweep = document.getElementById('btn-bode-sweep');
+        this.btnBodeRecord = document.getElementById('btn-bode-record');
+        this.btnBodeJumpWn = document.getElementById('btn-bode-jump-wn');
+        this.btnBodeClear = document.getElementById('btn-bode-clear');
+        this.bodeHudGain = document.getElementById('bode-hud-gain');
+        this.bodeHudPhase = document.getElementById('bode-hud-phase');
+
+        // サブタブ切替DOM
+        this.btnChartPhase = document.getElementById('btn-chart-phase');
+        this.btnChartBode = document.getElementById('btn-chart-bode');
+        this.secondaryChartSub = document.getElementById('secondary-chart-sub');
 
         // スライダー関連DOM
         this.sliderArea = document.getElementById('torque-slider-area');
@@ -217,9 +252,74 @@ class ControlApp {
             this.btnSysMSD.addEventListener('click', () => this.switchSystem('msd'));
         }
 
-        // ドライブモード切替（Manual vs Auto）
+        // ドライブモード切替
         this.btnDriveManual.addEventListener('click', () => this.setDriveMode('manual'));
         this.btnDriveAuto.addEventListener('click', () => this.setDriveMode('auto'));
+        if (this.btnDriveBode) {
+            this.btnDriveBode.addEventListener('click', () => this.setDriveMode('bode'));
+        }
+
+        // グラフサブタブ切替（相平面 ⇔ ボード線図）
+        if (this.btnChartPhase) {
+            this.btnChartPhase.addEventListener('click', () => this.setSecondaryChart('phase'));
+        }
+        if (this.btnChartBode) {
+            this.btnChartBode.addEventListener('click', () => this.setSecondaryChart('bode'));
+        }
+
+        // 正弦波周波数スライダー
+        if (this.paramBodeOmega) {
+            this.paramBodeOmega.addEventListener('input', (e) => {
+                const w = parseFloat(e.target.value);
+                this.bodeAnalyzer.setOmega(w);
+                this.updateBodeUI();
+            });
+        }
+
+        // 正弦波振幅スライダー
+        if (this.paramBodeAmp) {
+            this.paramBodeAmp.addEventListener('input', (e) => {
+                const amp = parseFloat(e.target.value);
+                this.bodeAnalyzer.setAmplitude(amp);
+                this.updateBodeUI();
+            });
+        }
+
+        // 自動スイープボタン
+        if (this.btnBodeSweep) {
+            this.btnBodeSweep.addEventListener('click', () => {
+                if (this.bodeAnalyzer.isSweeping) {
+                    this.bodeAnalyzer.stopSweep();
+                    this.btnBodeSweep.textContent = '▶ 自動周波数スイープ (Bode測定)';
+                } else {
+                    this.startBodeSweep();
+                }
+            });
+        }
+
+        // 現在値プロット記録ボタン
+        if (this.btnBodeRecord) {
+            this.btnBodeRecord.addEventListener('click', () => {
+                this.bodeAnalyzer.recordCurrentPoint();
+            });
+        }
+
+        // 共振点ジャンプボタン
+        if (this.btnBodeJumpWn) {
+            this.btnBodeJumpWn.addEventListener('click', () => {
+                const wn = this.getResonanceOmega();
+                this.bodeAnalyzer.setOmega(wn);
+                if (this.paramBodeOmega) this.paramBodeOmega.value = wn.toFixed(2);
+                this.updateBodeUI();
+            });
+        }
+
+        // プロット消去ボタン
+        if (this.btnBodeClear) {
+            this.btnBodeClear.addEventListener('click', () => {
+                this.bodeAnalyzer.clearMeasurements();
+            });
+        }
 
         // キーボード操作
         window.addEventListener('keydown', (e) => this.handleKeyDown(e));
@@ -257,6 +357,16 @@ class ControlApp {
         // マウスホイールによる微調整
         const onWheel = (e) => {
             e.preventDefault();
+            if (this.driveMode === 'bode') {
+                // 正弦波モード時はホイールで周波数を微増減
+                const delta = -Math.sign(e.deltaY) * 0.2;
+                const newW = Math.max(0.2, Math.min(25.0, this.bodeAnalyzer.omega + delta));
+                this.bodeAnalyzer.setOmega(newW);
+                if (this.paramBodeOmega) this.paramBodeOmega.value = newW.toFixed(2);
+                this.updateBodeUI();
+                return;
+            }
+
             if (this.driveMode === 'auto') this.setDriveMode('manual');
             if (this.activeSystem === 'pendulum') {
                 const delta = -Math.sign(e.deltaY) * (this.physics.tauMax * 0.04);
@@ -288,6 +398,7 @@ class ControlApp {
                 const val = parseFloat(e.target.value);
                 this.physics[key] = val;
                 valDisplay.textContent = val.toFixed(decimals) + unit;
+                this.updateBodeUI();
                 if (onChange) onChange(val);
             });
         };
@@ -311,6 +422,7 @@ class ControlApp {
                 const sign = (key === 'targetX' && val > 0) ? '+' : '';
                 valDisplay.textContent = `${sign}${val.toFixed(decimals)}${unit}`;
                 this.updateMSDCalculatedProperties();
+                this.updateBodeUI();
                 if (onChange) onChange(val);
             });
         };
@@ -372,6 +484,14 @@ class ControlApp {
         });
     }
 
+    getResonanceOmega() {
+        if (this.activeSystem === 'msd') {
+            return this.msdPhysics.omegaN;
+        } else {
+            return Math.sqrt(Math.max(0.1, this.physics.g) / Math.max(0.1, this.physics.l));
+        }
+    }
+
     /**
      * システム切替（振子 ⇔ マス・バネ・ダンパー）
      */
@@ -385,6 +505,7 @@ class ControlApp {
 
         // チャートモード更新
         this.charts.setSystemMode(sysName);
+        this.bodeAnalyzer.clearMeasurements();
 
         // UI表示の切替
         const isPendulum = sysName === 'pendulum';
@@ -395,10 +516,8 @@ class ControlApp {
         if (this.scaleMinLabel) this.scaleMinLabel.textContent = isPendulum ? '◀ CCW (-100%)' : '◀ 引張 (-100%)';
         if (this.scaleMaxLabel) this.scaleMaxLabel.textContent = isPendulum ? 'CW (+100%) ▶' : '押出 (+100%) ▶';
 
-        if (this.timeChartTitle) this.timeChartTitle.textContent = isPendulum ? '時系列応答 (Time History)' : '時系列応答 (Time History)';
+        if (this.timeChartTitle) this.timeChartTitle.textContent = '時系列応答 (Time History)';
         if (this.timeChartSub) this.timeChartSub.textContent = isPendulum ? 'θ・θ_ref・τ' : 'x・x_ref・F';
-        if (this.phaseChartTitle) this.phaseChartTitle.textContent = isPendulum ? '相平面プロット (Phase Plane: θ vs ω)' : '相平面プロット (Phase Plane: x vs v)';
-        if (this.phaseChartSub) this.phaseChartSub.textContent = isPendulum ? '平衡点と状態軌跡' : '平衡点と状態軌跡';
 
         if (this.pidFormulaBadge) {
             this.pidFormulaBadge.textContent = isPendulum ? 'τ = Kp·e + Ki·∫e dt - Kd·ω' : 'F = Kp·e + Ki·∫e dt - Kd·v';
@@ -420,27 +539,123 @@ class ControlApp {
         this.stabilized = false;
 
         this.updatePIDUI();
+        this.updateBodeUI();
         this.handleResize();
     }
 
     setDriveMode(mode) {
         this.driveMode = mode;
         const isAuto = mode === 'auto';
-        this.btnDriveManual.classList.toggle('active', !isAuto);
-        this.btnDriveAuto.classList.toggle('active', isAuto);
-        this.pidStatusBadge.style.display = isAuto ? 'inline-flex' : 'none';
-        this.manualModeToggles.style.opacity = isAuto ? '0.4' : '1.0';
-        this.manualModeToggles.style.pointerEvents = isAuto ? 'none' : 'auto';
+        const isBode = mode === 'bode';
+        const isManual = mode === 'manual';
 
-        if (isAuto) {
+        this.btnDriveManual.classList.toggle('active', isManual);
+        this.btnDriveAuto.classList.toggle('active', isAuto);
+        if (this.btnDriveBode) this.btnDriveBode.classList.toggle('active', isBode);
+
+        this.pidStatusBadge.style.display = isAuto ? 'inline-flex' : 'none';
+        if (this.bodeStatusBadge) this.bodeStatusBadge.style.display = isBode ? 'inline-flex' : 'none';
+
+        // パネルの表示切り替え
+        if (this.manualControlsPanel) this.manualControlsPanel.style.display = isBode ? 'none' : 'block';
+        if (this.bodeControlsPanel) this.bodeControlsPanel.style.display = isBode ? 'flex' : 'none';
+
+        this.charts.setBodeMode(isBode);
+
+        if (isBode) {
+            // 正弦波モード選択時は自動でボード線図サブタブへ切り替え
+            this.setSecondaryChart('bode');
+            this.bodeAnalyzer.stopSweep();
+            if (this.btnBodeSweep) this.btnBodeSweep.textContent = '▶ 自動周波数スイープ (Bode測定)';
+            // 初期周波数を共振周波数近傍に設定
+            const wn = this.getResonanceOmega();
+            this.bodeAnalyzer.setOmega(wn);
+            if (this.paramBodeOmega) this.paramBodeOmega.value = wn.toFixed(2);
+            this.updateBodeUI();
+        } else if (isAuto) {
             this.pendulumPid.reset();
             this.msdPid.reset();
+            this.bodeAnalyzer.stopSweep();
         } else {
+            this.bodeAnalyzer.stopSweep();
             if (this.sliderMode === 'spring') {
                 this.appliedTau = 0.0;
                 this.appliedForce = 0.0;
             }
         }
+    }
+
+    setSecondaryChart(type) {
+        this.activeSecondaryChart = type;
+        if (this.btnChartPhase) this.btnChartPhase.classList.toggle('active', type === 'phase');
+        if (this.btnChartBode) this.btnChartBode.classList.toggle('active', type === 'bode');
+
+        if (this.phaseCanvas) this.phaseCanvas.style.display = type === 'phase' ? 'block' : 'none';
+        if (this.bodeCanvas) this.bodeCanvas.style.display = type === 'bode' ? 'block' : 'none';
+
+        if (this.secondaryChartSub) {
+            this.secondaryChartSub.textContent = type === 'phase' ? '平衡点と状態軌跡' : '周波数応答 (ゲイン & 位相)';
+        }
+
+        this.handleResize();
+    }
+
+    updateBodeUI() {
+        const omega = this.bodeAnalyzer.omega;
+        const fHz = omega / (2.0 * Math.PI);
+        const period = (2.0 * Math.PI) / Math.max(0.01, omega);
+
+        if (this.valBodeOmega) {
+            this.valBodeOmega.textContent = `${omega.toFixed(2)} rad/s (${fHz.toFixed(2)} Hz, T=${period.toFixed(2)}s)`;
+        }
+
+        const amp = this.bodeAnalyzer.amplitude;
+        const unit = this.activeSystem === 'msd' ? 'N' : 'Nm';
+        if (this.valBodeAmp) {
+            this.valBodeAmp.textContent = `${amp.toFixed(1)} ${unit}`;
+        }
+        if (this.bodeAmpLabel) {
+            this.bodeAmpLabel.textContent = this.activeSystem === 'msd' ? '入力外力振幅 (Ain)' : 'モータトルク振幅 (Ain)';
+        }
+
+        const wn = this.getResonanceOmega();
+        if (this.btnBodeJumpWn) {
+            this.btnBodeJumpWn.textContent = `🎯 共振点へ (ωn=${wn.toFixed(2)})`;
+        }
+
+        if (this.bodeHudGain) {
+            if (this.bodeAnalyzer.currentAmpOut > 0.001) {
+                this.bodeHudGain.textContent = `ゲイン: ${this.bodeAnalyzer.currentGainDb.toFixed(1)} dB`;
+            } else {
+                this.bodeHudGain.textContent = 'ゲイン: -- dB';
+            }
+        }
+        if (this.bodeHudPhase) {
+            if (this.bodeAnalyzer.currentAmpOut > 0.001) {
+                this.bodeHudPhase.textContent = `位相: ${this.bodeAnalyzer.currentPhaseDeg.toFixed(0)}°`;
+            } else {
+                this.bodeHudPhase.textContent = '位相: --°';
+            }
+        }
+    }
+
+    startBodeSweep() {
+        const wn = this.getResonanceOmega();
+        // 共振周波数近傍を密にした対数スイープ配列
+        const sweepFreqs = [
+            0.4, 0.8, 1.2, 1.8, 2.5,
+            Math.max(0.5, wn * 0.85),
+            wn,
+            wn * 1.15,
+            Math.min(25.0, wn * 1.5),
+            5.0, 7.5, 11.0, 16.0, 22.0
+        ].sort((a, b) => a - b);
+
+        // 重複を除去
+        const uniqueFreqs = sweepFreqs.filter((val, idx, arr) => idx === 0 || Math.abs(val - arr[idx - 1]) > 0.15);
+
+        this.bodeAnalyzer.startSweep(uniqueFreqs);
+        if (this.btnBodeSweep) this.btnBodeSweep.textContent = '⏹ スイープ停止';
     }
 
     setSliderMode(mode) {
@@ -467,7 +682,7 @@ class ControlApp {
         };
 
         const onStart = (e) => {
-            if (this.driveMode === 'auto') this.setDriveMode('manual');
+            if (this.driveMode === 'auto' || this.driveMode === 'bode') this.setDriveMode('manual');
             this.isSliderDragging = true;
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             updateFromPointer(clientX);
@@ -530,7 +745,6 @@ class ControlApp {
             } else {
                 // マスバネダンパー系
                 const massInfo = this.msdRenderer.getMassPosition(this.msdPhysics);
-                // マスの矩形範囲（余裕幅 +20px）
                 const insideX = pos.x >= massInfo.left - 20 && pos.x <= massInfo.right + 20;
                 const insideY = pos.y >= massInfo.top - 20 && pos.y <= massInfo.bottom + 20;
 
@@ -560,7 +774,6 @@ class ControlApp {
                 this.physics.theta += diff;
                 this.physics.omega = diff / dt;
             } else {
-                // マスバネダンパー系: マスのX座標を変位に変換
                 const massInfo = this.msdRenderer.getMassPosition(this.msdPhysics);
                 const newX = (pos.x - massInfo.centerX0) / massInfo.scalePxPerMeter;
                 const clampedX = Math.max(-1.0, Math.min(1.2, newX));
@@ -677,6 +890,7 @@ class ControlApp {
         if (this.renderer) this.renderer.resize();
         if (this.msdRenderer) this.msdRenderer.resize();
         if (this.charts) this.charts.resize();
+        if (this.bodeRenderer) this.bodeRenderer.resize();
     }
 
     handleKeyDown(e) {
@@ -691,7 +905,7 @@ class ControlApp {
             this.keyState.ArrowRight = true;
             e.preventDefault();
         } else if (e.code === 'Space') {
-            if (this.driveMode === 'auto') this.setDriveMode('manual');
+            if (this.driveMode === 'auto' || this.driveMode === 'bode') this.setDriveMode('manual');
             this.appliedTau = 0.0;
             this.appliedForce = 0.0;
             e.preventDefault();
@@ -713,6 +927,38 @@ class ControlApp {
      * トルクまたは入力外力の更新およびスライダーUI同期
      */
     updateAppliedInput(dt) {
+        if (this.driveMode === 'bode') {
+            // 正弦波モード: BodeAnalyzerからの加振信号 u(t) を入力
+            const u = this.bodeAnalyzer.updateInput(dt);
+
+            if (this.activeSystem === 'pendulum') {
+                this.appliedTau = u;
+                if (!this.isDragging) {
+                    this.physics.update(dt, u);
+                }
+                // 出力は角度 [rad]
+                const yRad = this.physics.normalizedThetaDeg * (Math.PI / 180.0);
+                this.bodeAnalyzer.processSample(u, yRad, dt);
+            } else {
+                this.appliedForce = u;
+                if (!this.isDragging) {
+                    this.msdPhysics.update(dt, u);
+                }
+                // 出力は変位 [m]
+                this.bodeAnalyzer.processSample(u, this.msdPhysics.x, dt);
+            }
+
+            // Bode用HUDおよびスライダー表示の同期
+            this.updateBodeUI();
+            if (this.paramBodeOmega) {
+                this.paramBodeOmega.value = this.bodeAnalyzer.omega.toFixed(2);
+            }
+            if (!this.bodeAnalyzer.isSweeping && this.btnBodeSweep) {
+                this.btnBodeSweep.textContent = '▶ 自動周波数スイープ (Bode測定)';
+            }
+            return;
+        }
+
         if (this.activeSystem === 'pendulum') {
             // === 振子系 ===
             if (this.driveMode === 'auto') {
@@ -741,6 +987,10 @@ class ControlApp {
                     this.appliedTau += (0 - this.appliedTau) * Math.min(1.0, dt * 10.0);
                     if (Math.abs(this.appliedTau) < 0.005) this.appliedTau = 0.0;
                 }
+            }
+
+            if (!this.isDragging) {
+                this.physics.update(dt, this.appliedTau);
             }
 
             // スライダー表示同期
@@ -796,6 +1046,10 @@ class ControlApp {
                 }
             }
 
+            if (!this.isDragging) {
+                this.msdPhysics.update(dt, this.appliedForce);
+            }
+
             // スライダー表示同期 (右方向がプラス)
             const maxVal = Math.max(0.1, this.msdPhysics.fMax);
             const ratio = Math.max(-1.0, Math.min(1.0, this.appliedForce / maxVal));
@@ -822,7 +1076,7 @@ class ControlApp {
     }
 
     updateStabilization(dt) {
-        if (this.isDragging) {
+        if (this.isDragging || this.driveMode === 'bode') {
             this.holdingTime = 0.0;
             this.stabilized = false;
             return;
@@ -864,6 +1118,7 @@ class ControlApp {
             this.appliedForce = 0.0;
         }
         this.charts.clear();
+        this.bodeAnalyzer.clearMeasurements();
         this.holdingTime = 0.0;
         this.stabilized = false;
     }
@@ -881,6 +1136,7 @@ class ControlApp {
 
         this.updateParamUIFromPhysics();
         this.resetSimulation();
+        this.updateBodeUI();
     }
 
     applyMSDPreset(presetKey) {
@@ -895,6 +1151,7 @@ class ControlApp {
 
         this.updateMSDParamUI();
         this.resetSimulation();
+        this.updateBodeUI();
     }
 
     updateParamUIFromPhysics() {
@@ -967,17 +1224,6 @@ class ControlApp {
 
         if (!this.isPaused && dt > 0) {
             this.updateAppliedInput(dt);
-
-            if (this.activeSystem === 'pendulum') {
-                if (!this.isDragging) {
-                    this.physics.update(dt, this.appliedTau);
-                }
-            } else {
-                if (!this.isDragging) {
-                    this.msdPhysics.update(dt, this.appliedForce);
-                }
-            }
-
             this.updateStabilization(dt);
 
             this.chartSampleTimer += dt;
@@ -1000,10 +1246,14 @@ class ControlApp {
 
         if (this.activeSystem === 'pendulum') {
             this.renderer.draw(this.physics, status);
-            this.charts.render(this.physics);
+            this.charts.render(this.physics, this.bodeAnalyzer);
         } else {
             this.msdRenderer.draw(this.msdPhysics, status);
-            this.charts.render(this.msdPhysics);
+            this.charts.render(this.msdPhysics, this.bodeAnalyzer);
+        }
+
+        if (this.activeSecondaryChart === 'bode') {
+            this.bodeRenderer.draw(this.bodeAnalyzer, this.activeSystem, this.currentPhysics);
         }
 
         requestAnimationFrame((t) => this.loop(t));

@@ -741,6 +741,110 @@ input[type="range"] {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
 }
 
+/* 正弦波・周波数応答コントロールパネル */
+.bode-control-panel {
+    background: #0b0f19;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.bode-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.bode-status-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.88rem;
+}
+
+.pulse-dot-bode {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #38bdf8;
+    box-shadow: 0 0 8px #38bdf8;
+    animation: pulse-glow 1.5s infinite;
+}
+
+.bode-hud-badges {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.badge-hud {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    padding: 3px 8px;
+    border-radius: 4px;
+}
+
+.bode-params-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.bode-param-item {
+    background: var(--bg-surface);
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+}
+
+.bode-actions-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+/* チャートサブタブ（相平面 ⇔ ボード線図） */
+.chart-subtab-group {
+    display: flex;
+    gap: 4px;
+    background: #0b0f19;
+    padding: 2px 4px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+}
+
+.btn-subtab {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-subtab:hover {
+    color: var(--text-primary);
+}
+
+.btn-subtab.active {
+    background: var(--bg-card);
+    color: #38bdf8;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
 /* ========================================================
    📱 スマートフォン・タブレット向けレスポンシブスタイル
    ======================================================== */
@@ -845,6 +949,10 @@ input[type="range"] {
     }
 
     .preset-list {
+        grid-template-columns: 1fr;
+    }
+
+    .bode-params-grid {
         grid-template-columns: 1fr;
     }
 }

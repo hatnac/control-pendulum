@@ -86,70 +86,135 @@
 
             <!-- 操作パネル (Manual / Auto PID ＆ アナログ連続スライダー) -->
             <div class="control-bar">
-                <!-- モード切替バー: Manual (手動) vs Auto (PID自動制御) -->
+                <!-- モード切替バー: Manual (手動) vs Auto (PID自動制御) vs Bode (周波数応答) -->
                 <div class="drive-mode-bar">
-                    <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                         <span style="font-size: 0.85rem; font-weight: 700; color: var(--text-secondary);">モード:</span>
                         <div class="drive-toggle-group">
                             <button id="drive-manual" class="btn-drive active" title="人間による手動操作">🎮 Manual (手動)</button>
                             <button id="drive-auto" class="btn-drive" title="PIDコントローラによる目標値への自動位置制御">🤖 Auto (PID制御)</button>
+                            <button id="drive-bode" class="btn-drive" title="正弦波入力とボード線図周波数応答">〰️ 正弦波 (周波数応答)</button>
                         </div>
                     </div>
                     <div id="pid-status-badge" class="pid-status-badge" style="display: none;">
                         <span class="pulse-dot"></span> PID稼働中
                     </div>
+                    <div id="bode-status-badge" class="pid-status-badge" style="display: none; background: rgba(14, 165, 233, 0.15); border-color: #38bdf8; color: #38bdf8;">
+                        <span class="pulse-dot" style="background: #38bdf8;"></span> 正弦波加振中
+                    </div>
                 </div>
 
-                <!-- ステータス ＆ 設定ヘッダー -->
-                <div class="slider-header-row">
-                    <div class="slider-title-group">
-                        <span id="control-input-label" class="torque-meter-label">モータ出力:</span>
-                        <span id="torque-val-text" class="torque-val-badge">0.00 Nm (0%)</span>
+                <!-- 手動操作コントロールパネル (Manual / Auto用) -->
+                <div id="manual-controls-panel">
+                    <!-- ステータス ＆ 設定ヘッダー -->
+                    <div class="slider-header-row">
+                        <div class="slider-title-group">
+                            <span id="control-input-label" class="torque-meter-label">モータ出力:</span>
+                            <span id="torque-val-text" class="torque-val-badge">0.00 Nm (0%)</span>
+                        </div>
+
+                        <div class="slider-mode-group">
+                            <button id="btn-zero" class="btn btn-sm" title="出力を即座にゼロにします">ゼロ復帰 (Space)</button>
+                            <div class="mode-toggle-group" id="manual-mode-toggles">
+                                <button id="mode-spring" class="btn-mode active" title="指・マウスを離すと中央(0)に戻るジョイスティック風操作">🔄 スプリング復帰</button>
+                                <button id="mode-hold" class="btn-mode" title="指・マウスを離してもその出力を保持するスロットル操作">🔒 出力保持</button>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="slider-mode-group">
-                        <button id="btn-zero" class="btn btn-sm" title="出力を即座にゼロにします">ゼロ復帰 (Space)</button>
-                        <div class="mode-toggle-group" id="manual-mode-toggles">
-                            <button id="mode-spring" class="btn-mode active" title="指・マウスを離すと中央(0)に戻るジョイスティック風操作">🔄 スプリング復帰</button>
-                            <button id="mode-hold" class="btn-mode" title="指・マウスを離してもその出力を保持するスロットル操作">🔒 出力保持</button>
+                    <!-- メイン: インタラクティブ・アナログパドル（ドラッグ・スワイプ領域） -->
+                    <div class="slider-touch-area" id="torque-slider-area" title="マウスドラッグまたは指スワイプで連続的に出力を調整できます">
+                        <div class="slider-track" id="torque-slider-track">
+                            <div class="slider-zero-line"></div>
+                            <div id="gauge-fill" class="gauge-fill"></div>
+                            <div id="torque-slider-thumb" class="slider-thumb">
+                                <div class="thumb-grip"></div>
+                            </div>
+                        </div>
+
+                        <!-- スケール目盛り -->
+                        <div class="slider-scale-labels" id="slider-scale-labels">
+                            <span id="scale-min-label">◀ CCW (-100%)</span>
+                            <span id="scale-mid-left">-50%</span>
+                            <span style="color: var(--text-primary); font-weight: 700;">0 (停止)</span>
+                            <span id="scale-mid-right">+50%</span>
+                            <span id="scale-max-label">CW (+100%) ▶</span>
+                        </div>
+                    </div>
+
+                    <!-- 補助ボタン & ヒント -->
+                    <div class="slider-footer-row">
+                        <div class="nudge-buttons">
+                            <button id="btn-nudge-left" class="btn btn-sm" title="出力を左/引張方向に増やす">◀ 微動 (-)</button>
+                            <button id="btn-nudge-right" class="btn btn-sm" title="出力を右/押出方向に増やす">微動 (+) ▶</button>
+                        </div>
+                        <div class="control-hints">
+                            💡 <b>スワイプ / ドラッグ</b>で無段階調整 | <b>マウスホイール</b>で微調整 | <b>[←] [→]</b> スムーズ加速
                         </div>
                     </div>
                 </div>
 
-                <!-- メイン: インタラクティブ・アナログパドル（ドラッグ・スワイプ領域） -->
-                <div class="slider-touch-area" id="torque-slider-area" title="マウスドラッグまたは指スワイプで連続的に出力を調整できます">
-                    <div class="slider-track" id="torque-slider-track">
-                        <div class="slider-zero-line"></div>
-                        <div id="gauge-fill" class="gauge-fill"></div>
-                        <div id="torque-slider-thumb" class="slider-thumb">
-                            <div class="thumb-grip"></div>
+                <!-- 正弦波・周波数応答コントロールパネル (Bode用) -->
+                <div id="bode-controls-panel" class="bode-control-panel" style="display: none;">
+                    <div class="bode-header-row">
+                        <div class="bode-status-title">
+                            <span class="pulse-dot-bode"></span>
+                            <span style="font-weight: 700; color: #38bdf8;">正弦波入力 &amp; ボード線図測定</span>
+                        </div>
+                        <div class="bode-hud-badges">
+                            <span id="bode-hud-gain" class="badge-hud">ゲイン: -- dB</span>
+                            <span id="bode-hud-phase" class="badge-hud">位相: --°</span>
                         </div>
                     </div>
 
-                    <!-- スケール目盛り -->
-                    <div class="slider-scale-labels" id="slider-scale-labels">
-                        <span id="scale-min-label">◀ CCW (-100%)</span>
-                        <span id="scale-mid-left">-50%</span>
-                        <span style="color: var(--text-primary); font-weight: 700;">0 (停止)</span>
-                        <span id="scale-mid-right">+50%</span>
-                        <span id="scale-max-label">CW (+100%) ▶</span>
-                    </div>
-                </div>
+                    <div class="bode-params-grid">
+                        <!-- 周波数 ω -->
+                        <div class="bode-param-item">
+                            <div class="param-header">
+                                <span class="param-name">加振角周波数 (ω)</span>
+                                <span id="val-bode-omega" class="param-value" style="color: var(--accent-yellow);">3.46 rad/s</span>
+                            </div>
+                            <div class="param-slider-row">
+                                <input id="param-bode-omega" type="range" min="0.2" max="25.0" step="0.05" value="3.46">
+                            </div>
+                        </div>
 
-                <!-- 補助ボタン & ヒント -->
-                <div class="slider-footer-row">
-                    <div class="nudge-buttons">
-                        <button id="btn-nudge-left" class="btn btn-sm" title="出力を左/引張方向に増やす">◀ 微動 (-)</button>
-                        <button id="btn-nudge-right" class="btn btn-sm" title="出力を右/押出方向に増やす">微動 (+) ▶</button>
+                        <!-- 入力振幅 Ain -->
+                        <div class="bode-param-item">
+                            <div class="param-header">
+                                <span class="param-name" id="bode-amp-label">入力外力振幅 (Ain)</span>
+                                <span id="val-bode-amp" class="param-value">4.0 N</span>
+                            </div>
+                            <div class="param-slider-row">
+                                <input id="param-bode-amp" type="range" min="0.5" max="15.0" step="0.5" value="4.0">
+                            </div>
+                        </div>
                     </div>
-                    <div class="control-hints">
-                        💡 <b>スワイプ / ドラッグ</b>で無段階調整 | <b>マウスホイール</b>で微調整 | <b>[←] [→]</b> スムーズ加速
+
+                    <!-- アクションボタン群 -->
+                    <div class="bode-actions-row">
+                        <button id="btn-bode-sweep" class="btn btn-primary" title="低周波から高周波へ自動的に加振してボード線図を自動測定します">
+                            ▶ 自動周波数スイープ (Bode測定)
+                        </button>
+                        <button id="btn-bode-record" class="btn" title="現在周波数での振幅・位相をボード線図にプロットします">
+                            📍 現在値をプロット
+                        </button>
+                        <button id="btn-bode-jump-wn" class="btn" title="固有角周波数(共振点)に周波数を合わせます">
+                            🎯 共振点へ
+                        </button>
+                        <button id="btn-bode-clear" class="btn btn-danger" title="ボード線図の測定プロットを消去します">
+                            ↺ プロット消去
+                        </button>
+                    </div>
+
+                    <div class="control-hints" style="margin-top: 8px;">
+                        💡 <b>周波数スライダー</b>で周期変更 | <b>[▶ 自動スイープ]</b> で低〜高周波を自動加振してボード線図を1点ずつ自動生成！
                     </div>
                 </div>
             </div>
         </section>
 
-        <!-- セクション 2: 制御工学ダッシュボード（時系列グラフ ＆ 相平面） -->
+        <!-- セクション 2: 制御工学ダッシュボード（時系列グラフ ＆ 相平面 / ボード線図） -->
         <section id="tab-charts" class="card charts-section tab-section">
             <div class="chart-box">
                 <div class="card-title">
@@ -161,13 +226,17 @@
                 </div>
             </div>
 
-            <div class="chart-box">
-                <div class="card-title">
-                    <span id="phase-chart-title">相平面プロット (Phase Plane)</span>
-                    <span id="phase-chart-sub" style="font-size: 0.72rem; color: var(--text-muted);">平衡点と状態軌跡</span>
+            <div class="chart-box" id="secondary-chart-box">
+                <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div class="chart-subtab-group">
+                        <button id="btn-chart-phase" class="btn-subtab active" title="相平面プロットを表示">🌀 相平面</button>
+                        <button id="btn-chart-bode" class="btn-subtab" title="ボード線図 (ゲイン＆位相) を表示">📊 ボード線図 (Bode)</button>
+                    </div>
+                    <span id="secondary-chart-sub" style="font-size: 0.72rem; color: var(--text-muted);">平衡点と状態軌跡</span>
                 </div>
                 <div class="chart-canvas-wrapper">
                     <canvas id="phaseCanvas"></canvas>
+                    <canvas id="bodeCanvas" style="display: none;"></canvas>
                 </div>
             </div>
         </section>
@@ -461,6 +530,39 @@
                     <button class="btn btn-sm btn-pid-preset" data-kp="20" data-ki="0" data-kd="0">2. P制御のみ (定常偏差を観察！)</button>
                     <button class="btn btn-sm btn-pid-preset" data-kp="30" data-ki="0" data-kd="10">3. PD制御 (制動重視・オーバーシュート小)</button>
                     <button class="btn btn-sm btn-pid-preset" data-kp="20" data-ki="14" data-kd="0">4. PI制御 (定常偏差ゼロ・振動的)</button>
+                </div>
+            </div>
+
+            <!-- 周波数応答・ボード線図 学習ヒントカード -->
+            <div class="card bode-study-panel" style="grid-column: 1 / -1;">
+                <div class="card-title">
+                    <span>周波数応答とボード線図の物理的意味</span>
+                    <span style="font-size: 0.72rem; color: var(--accent-blue);">G(jω) = Y(jω) / U(jω)</span>
+                </div>
+                <div style="font-size: 0.8rem; line-height: 1.6; color: var(--text-secondary);">
+                    <p style="margin-bottom: 8px;">
+                        線形システムに正弦波入力 $u(t) = A_{in} \sin(\omega t)$ を加えると、定常状態では出力も同じ周波数の正弦波 $y(t) = A_{out} \sin(\omega t + \phi)$ になります。
+                    </p>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 10px;">
+                        <div style="background: #0b0f19; padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                            <strong style="color: var(--accent-blue); font-size: 0.85rem;">① ゲイン比 (振幅比) [dB]</strong><br>
+                            <span style="font-family: var(--font-mono); font-size: 0.78rem; color: #f8fafc;">20 log₁₀(A_out / A_in)</span>
+                            <ul style="margin-top: 6px; padding-left: 18px; font-size: 0.76rem; color: var(--text-muted); line-height: 1.5;">
+                                <li><b>低周波 (ω → 0)</b>: 静的変位に一致 (マスバネ系なら 1/K)。</li>
+                                <li><b>共振点 (ω ≈ ωn)</b>: ばねの復元力と質量慣性が打ち消し合い、ダンパー粘性のみで抑制されるため<b>振幅が大きく跳ね上がります（共振ピーク）</b>。</li>
+                                <li><b>高周波 (ω → ∞)</b>: 質量慣性が抵抗となり、出力振幅が急激に低下 (傾き -40 dB/decade)。</li>
+                            </ul>
+                        </div>
+                        <div style="background: #0b0f19; padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                            <strong style="color: var(--accent-yellow); font-size: 0.85rem;">② 位相差 (時間遅れ) [deg]</strong><br>
+                            <span style="font-family: var(--font-mono); font-size: 0.78rem; color: #f8fafc;">φ = -ω · Δt [rad]</span>
+                            <ul style="margin-top: 6px; padding-left: 18px; font-size: 0.76rem; color: var(--text-muted); line-height: 1.5;">
+                                <li><b>低周波 (ω → 0)</b>: 入力と同じタイミングで動く（φ ≈ 0°、同位相）。</li>
+                                <li><b>共振点 (ω = ωn)</b>: ちょうど 1/4 周期遅れる（<b>φ = -90°</b>）。速度と外力が同位相となりエネルギーが最も注入されます。</li>
+                                <li><b>高周波 (ω → ∞)</b>: 入力と完全に真逆の動きになる（<b>φ → -180° 逆位相</b>）！</li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
