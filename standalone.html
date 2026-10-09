@@ -832,11 +832,22 @@ input[type="range"] {
     border: 1px solid var(--border);
 }
 
+/* 過渡応答サブタブ（外力ステップ ⇔ 目標ステップ ⇔ インパルス） */
+.transient-type-tabs {
+    display: flex;
+    gap: 6px;
+    background: #0b0f19;
+    padding: 4px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+
 .btn-subtab {
     background: transparent;
     border: none;
     color: var(--text-secondary);
-    padding: 3px 8px;
+    padding: 4px 10px;
     border-radius: 4px;
     font-size: 0.74rem;
     font-weight: 600;
@@ -852,6 +863,11 @@ input[type="range"] {
     background: var(--bg-card);
     color: #38bdf8;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.transient-type-tabs .btn-subtab.active {
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
 /* ========================================================
@@ -1046,18 +1062,22 @@ input[type="range"] {
 
             <!-- 操作パネル (Manual / Auto PID ＆ アナログ連続スライダー) -->
             <div class="control-bar">
-                <!-- モード切替バー: Manual (手動) vs Auto (PID自動制御) vs Bode (周波数応答) -->
+                <!-- モード切替バー: Manual (手動) vs Auto (PID自動制御) vs Transient (過渡応答) vs Bode (周波数応答) -->
                 <div class="drive-mode-bar">
                     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                         <span style="font-size: 0.85rem; font-weight: 700; color: var(--text-secondary);">モード:</span>
                         <div class="drive-toggle-group">
                             <button id="drive-manual" class="btn-drive active" title="人間による手動操作">🎮 Manual (手動)</button>
                             <button id="drive-auto" class="btn-drive" title="PIDコントローラによる目標値への自動位置制御">🤖 Auto (PID制御)</button>
+                            <button id="drive-transient" class="btn-drive" title="インパルス応答およびステップ応答の過渡特性測定">⚡ ステップ / インパルス</button>
                             <button id="drive-bode" class="btn-drive" title="正弦波入力とボード線図周波数応答">〰️ 正弦波 (周波数応答)</button>
                         </div>
                     </div>
                     <div id="pid-status-badge" class="pid-status-badge" style="display: none;">
                         <span class="pulse-dot"></span> PID稼働中
+                    </div>
+                    <div id="transient-status-badge" class="pid-status-badge" style="display: none; background: rgba(245, 158, 11, 0.15); border-color: #f59e0b; color: #f59e0b;">
+                        <span class="pulse-dot" style="background: #f59e0b;"></span> 過渡応答測定中
                     </div>
                     <div id="bode-status-badge" class="pid-status-badge" style="display: none; background: rgba(14, 165, 233, 0.15); border-color: #38bdf8; color: #38bdf8;">
                         <span class="pulse-dot" style="background: #38bdf8;"></span> 正弦波加振中
@@ -1107,10 +1127,75 @@ input[type="range"] {
                         <div class="nudge-buttons">
                             <button id="btn-nudge-left" class="btn btn-sm" title="出力を左/引張方向に増やす">◀ 微動 (-)</button>
                             <button id="btn-nudge-right" class="btn btn-sm" title="出力を右/押出方向に増やす">微動 (+) ▶</button>
+                            <button id="btn-quick-impulse" class="btn btn-sm" style="color: #f43f5e; border-color: rgba(244, 63, 94, 0.4);" title="現在の状態に一瞬の撃力（インパルス）を加えます">⚡ 撃力 (Impulse)</button>
+                            <button id="btn-quick-step" class="btn btn-sm" style="color: #f59e0b; border-color: rgba(245, 158, 11, 0.4);" title="目標値または入力をステップ加振します">📈 ステップ</button>
                         </div>
                         <div class="control-hints">
                             💡 <b>スワイプ / ドラッグ</b>で無段階調整 | <b>マウスホイール</b>で微調整 | <b>[←] [→]</b> スムーズ加速
                         </div>
+                    </div>
+                </div>
+
+                <!-- 過渡応答・ステップ＆インパルス コントロールパネル -->
+                <div id="transient-controls-panel" class="bode-control-panel" style="display: none;">
+                    <div class="bode-header-row">
+                        <div class="bode-status-title">
+                            <span class="pulse-dot" style="background: #f59e0b;"></span>
+                            <span style="font-weight: 700; color: #f59e0b;">ステップ応答 ＆ インパルス応答 実験</span>
+                        </div>
+                        <div class="bode-hud-badges">
+                            <span id="transient-hud-mp" class="badge-hud">Mp: --%</span>
+                            <span id="transient-hud-tr" class="badge-hud">tr: --s</span>
+                            <span id="transient-hud-ts" class="badge-hud">ts: --s</span>
+                        </div>
+                    </div>
+
+                    <!-- 応答タイプ切替サブタブ -->
+                    <div class="transient-type-tabs">
+                        <button id="btn-tr-step-open" class="btn-subtab active" title="一定の外力/トルクを印加し続ける開ループステップ応答">📈 外力ステップ (開ループ)</button>
+                        <button id="btn-tr-step-closed" class="btn-subtab" title="PID制御で目標値へジャンプさせる閉ループステップ応答">🤖 目標ステップ (PID閉ループ)</button>
+                        <button id="btn-tr-impulse" class="btn-subtab" title="瞬間的な撃力(力積)を与えて自由減衰振動を観察するインパルス応答">⚡ インパルス応答 (撃力)</button>
+                    </div>
+
+                    <div class="bode-params-grid">
+                        <!-- 入力大きさスライダー -->
+                        <div class="bode-param-item">
+                            <div class="param-header">
+                                <span class="param-name" id="transient-param-label">ステップ外力 (F_step)</span>
+                                <span id="val-transient-param" class="param-value" style="color: var(--accent-yellow);">6.0 N</span>
+                            </div>
+                            <div class="param-slider-row">
+                                <input id="param-transient-input" type="range" min="1.0" max="25.0" step="0.5" value="6.0">
+                            </div>
+                        </div>
+
+                        <!-- 制御理論による予測表示 -->
+                        <div class="bode-param-item" style="display: flex; flex-direction: column; justify-content: center; background: rgba(15, 23, 42, 0.6); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border);">
+                            <div class="param-header">
+                                <span class="param-name" style="font-weight: 700; color: #10b981;">制御理論による理論予測値</span>
+                                <span id="val-transient-theory-status" class="param-value" style="font-size: 0.72rem; color: #10b981;">理論計算OK</span>
+                            </div>
+                            <div id="transient-theory-text" style="font-size: 0.76rem; color: var(--text-secondary); margin-top: 4px; line-height: 1.4; font-family: var(--font-mono);">
+                                理論最終値: 0.50m | 理論Mp: +28.1% | 理論ts: 3.8s
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- アクションボタン群 -->
+                    <div class="bode-actions-row">
+                        <button id="btn-transient-start" class="btn btn-primary" style="background: #f59e0b; border-color: #d97706; color: #0f172a; font-weight: 700;" title="初期状態にリセットして応答測定を開始します">
+                            ▶ 実験開始 (0秒から再実行)
+                        </button>
+                        <button id="btn-transient-impulse-hit" class="btn" title="現在の状態のまま瞬間的な撃力を追加します">
+                            ⚡ 撃力を追加 (小突く)
+                        </button>
+                        <button id="btn-transient-reset" class="btn" title="初期状態にリセットします">
+                            ↺ リセット
+                        </button>
+                    </div>
+
+                    <div class="control-hints" style="margin-top: 8px;">
+                        💡 <b>[▶ 実験開始]</b> で0秒から応答を綺麗に記録 | グラフ上に <b>最大オーバーシュート(Mp)・立上時間(tr)・整定時間(ts)</b> を自動描画！
                     </div>
                 </div>
 
@@ -1490,6 +1575,37 @@ input[type="range"] {
                     <button class="btn btn-sm btn-pid-preset" data-kp="20" data-ki="0" data-kd="0">2. P制御のみ (定常偏差を観察！)</button>
                     <button class="btn btn-sm btn-pid-preset" data-kp="30" data-ki="0" data-kd="10">3. PD制御 (制動重視・オーバーシュート小)</button>
                     <button class="btn btn-sm btn-pid-preset" data-kp="20" data-ki="14" data-kd="0">4. PI制御 (定常偏差ゼロ・振動的)</button>
+                </div>
+            </div>
+
+            <!-- 過渡応答（インパルス応答・ステップ応答）学習ヒントカード -->
+            <div class="card bode-study-panel" style="grid-column: 1 / -1;">
+                <div class="card-title">
+                    <span>過渡応答（インパルス・ステップ）の物理的・制御工学的意味</span>
+                    <span style="font-size: 0.72rem; color: #f59e0b;">g(t) = L⁻¹[G(s)] &amp; y(t) = L⁻¹[G(s)/s]</span>
+                </div>
+                <div style="font-size: 0.8rem; line-height: 1.6; color: var(--text-secondary);">
+                    <p style="margin-bottom: 8px;">
+                        システムの伝達関数 $G(s)$ の本質を知る代表的な試験信号が「インパルス入力 $\delta(t)$」と「ステップ入力 $1(t)$」です。
+                    </p>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 10px;">
+                        <div style="background: #0b0f19; padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                            <strong style="color: #f43f5e; font-size: 0.85rem;">⚡ インパルス応答 (Impulse Response)</strong><br>
+                            <span style="font-family: var(--font-mono); font-size: 0.78rem; color: #f8fafc;">g(t) = 瞬間的な撃力 (力積 I) に対する応答</span>
+                            <ul style="margin-top: 6px; padding-left: 18px; font-size: 0.76rem; color: var(--text-muted); line-height: 1.5;">
+                                <li><b>物理的解釈</b>: 静止した系をハンマー等で一瞬叩き、初期速度を与えた後の<b>自由減衰振動挙動</b>。</li>
+                                <li><b>固有角周波数 ωn と減衰比 ζ</b>: 不足減衰($\zeta < 1$)では減衰周期 $T_d = 2\pi / (\omega_n \sqrt{1-\zeta^2})$ で振動し、振幅は $e^{-\zeta \omega_n t}$ で包絡減衰します。臨界減衰($\zeta = 1$)では振動せず最速で静止します。</li>
+                            </ul>
+                        </div>
+                        <div style="background: #0b0f19; padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                            <strong style="color: #f59e0b; font-size: 0.85rem;">📈 ステップ応答 (Step Response)</strong><br>
+                            <span style="font-family: var(--font-mono); font-size: 0.78rem; color: #f8fafc;">y(t) = 一定入力への過渡応答 (インパルス積分の関係)</span>
+                            <ul style="margin-top: 6px; padding-left: 18px; font-size: 0.76rem; color: var(--text-muted); line-height: 1.5;">
+                                <li><b>行き過ぎ量 (オーバーシュート Mp)</b>: 目標値・最終値を超過するピーク割合。理論値は $M_p = e^{-\pi \zeta / \sqrt{1-\zeta^2}} \times 100\%$。</li>
+                                <li><b>立上り時間 tr &amp; 整定時間 ts</b>: どれだけ速く立ち上がり、目標値の $\pm 2\%$ 以内に安定するかを評価。PIDの $K_p, K_i, K_d$ 設計の直接的な指標になります。</li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -2947,6 +3063,7 @@ class ControlCharts {
         // 現在のシステムモード ('pendulum' | 'msd')
         this.systemMode = 'pendulum';
         this.isBodeMode = false;
+        this.isTransientMode = false;
 
         // データ履歴バッファ
         this.maxHistory = 400; // 約6〜8秒分のデータ
@@ -2968,7 +3085,10 @@ class ControlCharts {
             phaseDot: '#38bdf8',
             phaseLine: 'rgba(56, 189, 248, 0.4)',
             peakLine: 'rgba(234, 179, 8, 0.4)',
-            dtArrow: '#f59e0b'
+            dtArrow: '#f59e0b',
+            settleBand: 'rgba(234, 179, 8, 0.08)',
+            settleBorder: 'rgba(234, 179, 8, 0.25)',
+            impulseMarker: '#f43f5e'
         };
 
         this.resize();
@@ -2992,6 +3112,10 @@ class ControlCharts {
 
     setBodeMode(isBode) {
         this.isBodeMode = isBode;
+    }
+
+    setTransientMode(isTransient) {
+        this.isTransientMode = isTransient;
     }
 
     resize() {
@@ -3096,9 +3220,10 @@ class ControlCharts {
      * 両グラフを更新描画
      * @param {object} physics 
      * @param {object} bodeAnalyzer (任意: 正弦波周波数応答用)
+     * @param {object} transientManager (任意: 過渡応答用)
      */
-    render(physics, bodeAnalyzer = null) {
-        this.renderTimeHistory(physics, bodeAnalyzer);
+    render(physics, bodeAnalyzer = null, transientManager = null) {
+        this.renderTimeHistory(physics, bodeAnalyzer, transientManager);
         if (this.phaseCanvas && this.phaseCanvas.style.display !== 'none') {
             this.renderPhasePlane(physics);
         }
@@ -3107,7 +3232,7 @@ class ControlCharts {
     /**
      * 時系列応答グラフ
      */
-    renderTimeHistory(physics, bodeAnalyzer = null) {
+    renderTimeHistory(physics, bodeAnalyzer = null, transientManager = null) {
         if (!this.tWidth || this.tWidth < 20 || !this.tHeight || this.tHeight < 20) {
             this.resize();
         }
@@ -3121,6 +3246,7 @@ class ControlCharts {
 
         const isPendulum = this.systemMode === 'pendulum';
         const isBode = this.isBodeMode && bodeAnalyzer !== null;
+        const isTransient = this.isTransientMode && transientManager !== null;
 
         const padLeft = isPendulum ? 42 : 46;
         const padRight = 15;
@@ -3190,6 +3316,20 @@ class ControlCharts {
                 ctx.fillStyle = '#eab308';
                 ctx.fillText(`|G|=${bodeAnalyzer.currentGainDb.toFixed(1)}dB  φ=${bodeAnalyzer.currentPhaseDeg.toFixed(0)}°`, padLeft + 185, padTop - 8);
             }
+        } else if (isTransient) {
+            // 過渡応答モードの凡例
+            ctx.fillStyle = this.colors.signal;
+            ctx.fillText(isPendulum ? '― 応答 θ(t)' : '― 応答 x(t)', padLeft + 6, padTop - 8);
+
+            if (transientManager.responseType === 'impulse') {
+                ctx.fillStyle = this.colors.impulseMarker;
+                ctx.fillText('⚡ インパルス撃力', padLeft + 85, padTop - 8);
+            } else {
+                ctx.fillStyle = this.colors.target;
+                ctx.fillText('--- 目標/定常値', padLeft + 85, padTop - 8);
+                ctx.fillStyle = this.colors.control;
+                ctx.fillText('― 入力', padLeft + 175, padTop - 8);
+            }
         } else {
             // 通常モードの凡例
             ctx.fillStyle = this.colors.signal;
@@ -3202,8 +3342,8 @@ class ControlCharts {
 
         if (this.history.length < 2) return;
 
-        // 1. 目標値の破線プロット (通常モード時のみ)
-        if (!isBode) {
+        // 1. 目標値の破線プロット (通常モードおよび過渡ステップ時)
+        if (!isBode && (!isTransient || transientManager.responseType !== 'impulse')) {
             ctx.save();
             ctx.strokeStyle = this.colors.target;
             ctx.lineWidth = 1.5;
@@ -3278,6 +3418,136 @@ class ControlCharts {
         if (isBode && bodeAnalyzer.currentAmpOut > 0.005) {
             this.drawBodeAnnotations(ctx, padLeft, plotW, plotH, zeroY, isPendulum, bodeAnalyzer);
         }
+
+        // 5. 過渡応答モード時のアノテーション
+        if (isTransient) {
+            this.drawTransientAnnotations(ctx, padLeft, plotW, plotH, zeroY, isPendulum, transientManager);
+        }
+    }
+
+    /**
+     * 過渡応答（インパルス / ステップ）のアノテーションおよびHUD描画
+     */
+    drawTransientAnnotations(ctx, padLeft, plotW, plotH, zeroY, isPendulum, tm) {
+        ctx.save();
+
+        const isImpulse = tm.responseType === 'impulse';
+        const targetVal = tm.targetFinal;
+        const metrics = tm.metrics;
+
+        // 値 -> Y座標変換ヘルパー
+        const valToY = (val) => {
+            if (isPendulum) {
+                return 22 + plotH * (1.0 - (val + 180) / 360);
+            } else {
+                const norm = (val - (-1.0)) / 2.0;
+                return 22 + plotH * (1.0 - Math.max(0, Math.min(1, norm)));
+            }
+        };
+
+        if (!isImpulse && Math.abs(targetVal - tm.y0) > 0.005) {
+            // ステップ応答のアノテーション
+            const yTarget = valToY(targetVal);
+            const stepMag = Math.abs(targetVal - tm.y0);
+            const bandVal = stepMag * tm.metrics.toleranceBand;
+            const yBandTop = valToY(targetVal + (targetVal >= tm.y0 ? bandVal : -bandVal));
+            const yBandBottom = valToY(targetVal - (targetVal >= tm.y0 ? bandVal : -bandVal));
+
+            // 1. ±2% 整定許容バンド
+            const bTop = Math.min(yBandTop, yBandBottom);
+            const bHeight = Math.abs(yBandBottom - yBandTop);
+            ctx.fillStyle = this.colors.settleBand;
+            ctx.fillRect(padLeft, bTop, plotW, Math.max(2, bHeight));
+
+            ctx.strokeStyle = this.colors.settleBorder;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([2, 4]);
+            ctx.beginPath();
+            ctx.moveTo(padLeft, bTop);
+            ctx.lineTo(padLeft + plotW, bTop);
+            ctx.moveTo(padLeft, bTop + bHeight);
+            ctx.lineTo(padLeft + plotW, bTop + bHeight);
+            ctx.stroke();
+
+            // バンドラベル
+            ctx.fillStyle = 'rgba(234, 179, 8, 0.5)';
+            ctx.font = '9px monospace';
+            ctx.textAlign = 'right';
+            ctx.fillText('±2%バンド', padLeft + plotW - 4, bTop - 3);
+
+            // 2. 最大オーバーシュート点 (ピーク) のマーカー
+            if (metrics.peakVal !== null && metrics.overshootPercent !== null && metrics.overshootPercent > 0.5) {
+                const yPeak = valToY(metrics.peakVal);
+                ctx.setLineDash([3, 3]);
+                ctx.strokeStyle = 'rgba(234, 179, 8, 0.45)';
+                ctx.beginPath();
+                ctx.moveTo(padLeft, yPeak);
+                ctx.lineTo(padLeft + plotW, yPeak);
+                ctx.stroke();
+
+                ctx.fillStyle = '#eab308';
+                ctx.font = '10px monospace';
+                ctx.textAlign = 'left';
+                ctx.fillText(`ピーク値: ${metrics.peakVal.toFixed(2)}${isPendulum ? '°' : 'm'} (Mp: +${metrics.overshootPercent.toFixed(1)}%)`, padLeft + 8, yPeak - 4);
+            }
+        }
+
+        // 3. インパルス応答時: 撃力印加マーカー
+        if (isImpulse && tm.lastImpulseTime >= 0) {
+            ctx.save();
+            ctx.fillStyle = this.colors.impulseMarker;
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('⚡ 撃力印加', padLeft + 40, zeroY - 20);
+            ctx.restore();
+        }
+
+        // 4. 右上 HUD オーバーレイ (過渡特性サマリー)
+        const hudW = 160;
+        const hudH = isImpulse ? 48 : 66;
+        const hudX = padLeft + plotW - hudW - 6;
+        const hudY = 26;
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([]);
+        ctx.fillRect(hudX, hudY, hudW, hudH);
+        ctx.strokeRect(hudX, hudY, hudW, hudH);
+
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = 'bold 9px monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText(isImpulse ? '【 インパルス過渡特性 】' : '【 ステップ過渡特性 】', hudX + 6, hudY + 12);
+
+        ctx.font = '9px monospace';
+        if (isImpulse) {
+            ctx.fillStyle = '#38bdf8';
+            const peakStr = metrics.peakVal !== null ? `${metrics.peakVal.toFixed(2)}${isPendulum ? '°' : 'm'}` : '--';
+            ctx.fillText(`最大応答 y_max: ${peakStr}`, hudX + 6, hudY + 26);
+            ctx.fillStyle = metrics.isSettled ? '#10b981' : '#94a3b8';
+            const tsStr = metrics.settlingTime !== null ? `${metrics.settlingTime.toFixed(2)}s` : (metrics.isSettled ? '整定済' : '過渡中...');
+            ctx.fillText(`整定時間 t_s:   ${tsStr}`, hudX + 6, hudY + 40);
+        } else {
+            // ステップ
+            ctx.fillStyle = (metrics.overshootPercent && metrics.overshootPercent > 0) ? '#eab308' : '#94a3b8';
+            const mpStr = metrics.overshootPercent !== null ? `${metrics.overshootPercent.toFixed(1)}%` : '--%';
+            ctx.fillText(`行き過ぎ量 Mp: ${mpStr}`, hudX + 6, hudY + 24);
+
+            ctx.fillStyle = metrics.riseTime !== null ? '#38bdf8' : '#94a3b8';
+            const trStr = metrics.riseTime !== null ? `${metrics.riseTime.toFixed(2)}s` : '--';
+            ctx.fillText(`立上時間 t_r:  ${trStr}`, hudX + 6, hudY + 36);
+
+            ctx.fillStyle = metrics.isSettled ? '#10b981' : '#94a3b8';
+            const tsStr = metrics.settlingTime !== null ? `${metrics.settlingTime.toFixed(2)}s` : (metrics.isSettled ? '整定済' : '過渡中...');
+            ctx.fillText(`整定時間 t_s:  ${tsStr}`, hudX + 6, hudY + 48);
+
+            ctx.fillStyle = '#cbd5e1';
+            const essStr = metrics.steadyStateError !== null ? `${metrics.steadyStateError.toFixed(3)}${isPendulum ? '°' : 'm'}` : '--';
+            ctx.fillText(`定常偏差 e_ss: ${essStr}`, hudX + 6, hudY + 60);
+        }
+
+        ctx.restore();
     }
 
     /**
@@ -4205,9 +4475,384 @@ class BodeRenderer {
 }
 
 /**
+ * transient.js - インパルス応答・ステップ応答管理＆リアルタイム過渡特性解析
+ * （マス・バネ・ダンパー系 & 振子モータ制御系 両対応）
+ */
+
+class TransientManager {
+    constructor() {
+        // 応答タイプ: 'impulse' (インパルス) | 'step_open' (外力ステップ・開ループ) | 'step_closed' (目標値ステップ・PID閉ループ)
+        this.responseType = 'step_open';
+
+        // パラメータ
+        this.params = {
+            // インパルス力積 [N·s] または [N·m·s]
+            impulseMSD: 3.0,       // マスバネ系力積 [N·s]
+            impulsePendulum: 3.0,  // 振子系力積トルク [N·m·s]
+            
+            // 開ループステップ外力 [N] または [N·m]
+            stepForceMSD: 6.0,      // マスバネ系ステップ外力 [N]
+            stepTorquePendulum: 5.0,// 振子系ステップトルク [N·m]
+
+            // 閉ループステップ目標値 [m] または [deg]
+            stepTargetMSD: 0.5,     // マスバネ系目標変位 [m]
+            stepTargetPendulum: 90.0 // 振子系目標角度 [deg]
+        };
+
+        // 実行状態
+        this.isRunning = false;
+        this.elapsedTime = 0.0;
+        this.y0 = 0.0;             // 開始時の出力値
+        this.targetFinal = 0.0;    // 目標値または予想最終値
+        this.samples = [];         // [{ t, y, v, u }]
+
+        // インパルス印加マーカー情報 (時系列グラフ描画用)
+        this.lastImpulseTime = -1.0;
+        this.lastImpulseValue = 0.0;
+
+        // 過渡特性メトリクス (リアルタイム解析)
+        this.metrics = {
+            peakVal: null,         // 最大ピーク値 y_max
+            peakTime: null,        // ピーク到達時間 t_p [s]
+            overshootPercent: null,// オーバーシュート率 M_p [%]
+            riseTime: null,        // 立ち上がり時間 t_r [s] (10% -> 90%)
+            settlingTime: null,    // 整定時間 t_s [s] (±2% または ±5% バンド)
+            steadyStateError: null,// 定常偏差 e_ss
+            isSettled: false,      // 整定完了フラグ
+            toleranceBand: 0.02    // 整定判定バンド (±2%)
+        };
+    }
+
+    /**
+     * 応答タイプを設定
+     * @param {'impulse' | 'step_open' | 'step_closed'} type 
+     */
+    setResponseType(type) {
+        this.responseType = type;
+        this.resetMetrics();
+    }
+
+    /**
+     * メトリクスと履歴をリセット
+     */
+    resetMetrics() {
+        this.samples = [];
+        this.elapsedTime = 0.0;
+        this.t10 = null;
+        this.t90 = null;
+        this.metrics = {
+            peakVal: null,
+            peakTime: null,
+            overshootPercent: null,
+            riseTime: null,
+            settlingTime: null,
+            steadyStateError: null,
+            isSettled: false,
+            toleranceBand: 0.02
+        };
+    }
+
+    /**
+     * 実験を開始（初期状態にリセットして応答測定をスタート）
+     * @param {'pendulum' | 'msd'} systemMode 
+     * @param {object} physics 
+     * @param {object} pidController 
+     */
+    startExperiment(systemMode, physics, pidController) {
+        this.resetMetrics();
+        this.isRunning = true;
+        this.elapsedTime = 0.0;
+
+        const isPendulum = systemMode === 'pendulum';
+
+        if (isPendulum) {
+            // 振子系を初期状態（下向き静止）にリセット
+            physics.reset(0, 0);
+            this.y0 = 0.0; // 0 deg
+
+            if (this.responseType === 'impulse') {
+                // インパルス応答: t=0 で瞬間角力積を与える: Δω = I_tau / J
+                const impulse = this.params.impulsePendulum;
+                const J = physics.J;
+                const deltaOmega = impulse / Math.max(0.01, J);
+                physics.omega += deltaOmega;
+                this.lastImpulseTime = 0.0;
+                this.lastImpulseValue = impulse;
+                this.targetFinal = 0.0; // 最終的に下向き0°に戻る
+            } else if (this.responseType === 'step_open') {
+                // 開ループステップ応答: 外力トルクを印加
+                this.targetFinal = 0.0; // 非線形振子のため目標値は運動依存
+            } else if (this.responseType === 'step_closed') {
+                // 閉ループステップ応答: PIDの目標角度を設定
+                const targetDeg = this.params.stepTargetPendulum;
+                physics.targetAngleDeg = targetDeg;
+                this.targetFinal = targetDeg;
+                if (pidController) pidController.reset();
+            }
+        } else {
+            // マス・バネ・ダンパー系を初期状態（自然長・静止）にリセット
+            physics.reset(0, 0);
+            this.y0 = 0.0; // 0 m
+
+            if (this.responseType === 'impulse') {
+                // インパルス応答: t=0 で瞬間力積を与える: Δv = I / m
+                const impulse = this.params.impulseMSD;
+                const m = physics.m;
+                const deltaV = impulse / Math.max(0.01, m);
+                physics.v += deltaV;
+                this.lastImpulseTime = 0.0;
+                this.lastImpulseValue = impulse;
+                this.targetFinal = 0.0; // 最終的に自然長0mに戻る
+            } else if (this.responseType === 'step_open') {
+                // 開ループステップ応答: 外力 F_step を印加
+                const fStep = this.params.stepForceMSD;
+                // 理論最終値: x_final = F / K
+                this.targetFinal = fStep / Math.max(0.1, physics.k);
+            } else if (this.responseType === 'step_closed') {
+                // 閉ループステップ応答: 目標位置を設定
+                const targetX = this.params.stepTargetMSD;
+                physics.targetX = targetX;
+                this.targetFinal = targetX;
+                if (pidController) pidController.reset();
+            }
+        }
+    }
+
+    /**
+     * 現在の状態のまま瞬間的に力積（インパルス撃力）を加える
+     * @param {object} physics 
+     * @param {'pendulum' | 'msd'} systemMode 
+     * @param {number|null} customImpulse 
+     */
+    applyImpulse(physics, systemMode, customImpulse = null) {
+        const isPendulum = systemMode === 'pendulum';
+        if (isPendulum) {
+            const impulse = customImpulse !== null ? customImpulse : this.params.impulsePendulum;
+            const J = physics.J;
+            physics.omega += impulse / Math.max(0.01, J);
+            this.lastImpulseTime = physics.time;
+            this.lastImpulseValue = impulse;
+        } else {
+            const impulse = customImpulse !== null ? customImpulse : this.params.impulseMSD;
+            const m = physics.m;
+            physics.v += impulse / Math.max(0.01, m);
+            this.lastImpulseTime = physics.time;
+            this.lastImpulseValue = impulse;
+        }
+    }
+
+    /**
+     * 毎フレームの制御入力計算
+     * @param {number} dt 
+     * @param {object} physics 
+     * @param {'pendulum' | 'msd'} systemMode 
+     * @param {object} pidController 
+     * @returns {number} applied input (tau or force)
+     */
+    computeInput(dt, physics, systemMode, pidController) {
+        if (!this.isRunning) {
+            return 0.0;
+        }
+
+        this.elapsedTime += dt;
+        const isPendulum = systemMode === 'pendulum';
+        let u = 0.0;
+
+        if (this.responseType === 'impulse') {
+            // インパルス応答時は初期撃力後の継続入力は0
+            u = 0.0;
+        } else if (this.responseType === 'step_open') {
+            // 開ループステップ入力
+            u = isPendulum ? this.params.stepTorquePendulum : this.params.stepForceMSD;
+        } else if (this.responseType === 'step_closed') {
+            // 閉ループPID制御
+            if (pidController) {
+                if (isPendulum) {
+                    const targetRad = physics.targetAngleRad;
+                    const currentRad = physics.theta;
+                    u = pidController.compute(targetRad, currentRad, physics.omega, dt, physics.tauMax);
+                } else {
+                    const targetX = physics.targetX;
+                    const currentX = physics.x;
+                    u = pidController.compute(targetX, currentX, physics.v, dt, physics.fMax);
+                }
+            }
+        }
+
+        // サンプル記録
+        const y = isPendulum ? physics.normalizedThetaDeg : physics.x;
+        const v = isPendulum ? physics.omega : physics.v;
+        this.samples.push({
+            t: this.elapsedTime,
+            y: y,
+            v: v,
+            u: u
+        });
+
+        // 過去の多すぎるサンプルは間引き（直近1000件）
+        if (this.samples.length > 1000) {
+            this.samples.shift();
+        }
+
+        // リアルタイム解析
+        this.analyzeMetrics(y, v, isPendulum);
+
+        return u;
+    }
+
+    /**
+     * 過渡特性メトリクスの解析
+     * @param {number} currentY 
+     * @param {number} currentV 
+     * @param {boolean} isPendulum 
+     */
+    analyzeMetrics(currentY, currentV, isPendulum) {
+        if (this.samples.length < 5) return;
+
+        const m = this.metrics;
+        const stepMag = this.targetFinal - this.y0;
+        const isStep = this.responseType === 'step_open' || this.responseType === 'step_closed';
+
+        if (isStep && Math.abs(stepMag) > 0.001) {
+            const sign = stepMag > 0 ? 1 : -1;
+
+            // 1. 最大ピーク値 & オーバーシュート (オンライン追跡)
+            const currentNormVal = (currentY - this.y0) * sign;
+            if (m.peakVal === null || currentNormVal > (m.peakVal - this.y0) * sign) {
+                m.peakVal = currentY;
+                m.peakTime = this.elapsedTime;
+
+                const finalNorm = Math.abs(stepMag);
+                if (currentNormVal > finalNorm) {
+                    m.overshootPercent = ((currentNormVal - finalNorm) / finalNorm) * 100.0;
+                } else {
+                    m.overshootPercent = 0.0;
+                }
+            }
+
+            // 2. 立ち上がり時間 (10% -> 90%)
+            const val10 = this.y0 + stepMag * 0.1;
+            const val90 = this.y0 + stepMag * 0.9;
+
+            if (this.t10 === undefined || this.t10 === null) {
+                if (sign > 0 ? currentY >= val10 : currentY <= val10) {
+                    this.t10 = this.elapsedTime;
+                }
+            }
+            if (this.t90 === undefined || this.t90 === null) {
+                if (sign > 0 ? currentY >= val90 : currentY <= val90) {
+                    this.t90 = this.elapsedTime;
+                }
+            }
+
+            if (this.t10 !== null && this.t10 !== undefined && this.t90 !== null && this.t90 !== undefined && this.t90 >= this.t10) {
+                m.riseTime = this.t90 - this.t10;
+            }
+
+            // 3. 整定時間 (±2% または ±5% バンド)
+            // 最後のサンプルから遡って、バンド外に出た一番遅い時刻を探す
+            const bandVal = Math.max(0.005, Math.abs(stepMag) * m.toleranceBand);
+            let lastOutOfBandTime = 0.0;
+            let settled = true;
+
+            for (let i = 0; i < this.samples.length; i++) {
+                const s = this.samples[i];
+                const err = Math.abs(s.y - this.targetFinal);
+                if (err > bandVal) {
+                    lastOutOfBandTime = s.t;
+                }
+            }
+
+            // 経過時間が十分あり、現在バンド内かつ速度が十分小さければ整定
+            const currentErr = Math.abs(currentY - this.targetFinal);
+            const isNearZeroVel = Math.abs(currentV) < (isPendulum ? 0.05 : 0.02);
+
+            if (this.elapsedTime > 0.5 && currentErr <= bandVal && isNearZeroVel) {
+                m.settlingTime = lastOutOfBandTime;
+                m.isSettled = true;
+            } else {
+                m.settlingTime = null;
+                m.isSettled = false;
+            }
+
+            // 4. 定常偏差
+            m.steadyStateError = Math.abs(currentY - this.targetFinal);
+
+        } else if (this.responseType === 'impulse') {
+            // インパルス応答の解析 (オンライン追跡)
+            const absVal = Math.abs(currentY);
+            if (m.peakVal === null || absVal > m.peakVal) {
+                m.peakVal = absVal;
+                m.peakTime = this.elapsedTime;
+            }
+
+            // 振幅が最大ピークの 5% 以下に収束した時間を整定時間とする
+            const thresh = Math.max(0.005, (m.peakVal || 0.1) * 0.05);
+            let lastOut = 0.0;
+            for (const s of this.samples) {
+                if (Math.abs(s.y) > thresh) {
+                    lastOut = s.t;
+                }
+            }
+
+            if (this.elapsedTime > 0.5 && Math.abs(currentY) <= thresh && Math.abs(currentV) < 0.02) {
+                m.settlingTime = lastOut;
+                m.isSettled = true;
+            }
+        }
+    }
+
+    /**
+     * マス・バネ・ダンパー系の理論過渡特性を算出
+     * @param {object} msdPhysics 
+     * @returns {object}
+     */
+    getMSDTheoreticalProperties(msdPhysics) {
+        const m = msdPhysics.m;
+        const k = msdPhysics.k;
+        const d = msdPhysics.d;
+
+        const wn = Math.sqrt(k / m);
+        const zeta = d / (2 * Math.sqrt(m * k));
+
+        let theoreticalMp = 0;
+        let theoreticalTp = null;
+        let theoreticalTs = null; // 2%バンド
+        let wd = wn;
+
+        if (zeta < 1.0 && zeta >= 0) {
+            wd = wn * Math.sqrt(1 - zeta * zeta);
+            if (zeta > 0) {
+                theoreticalMp = Math.exp(-Math.PI * zeta / Math.sqrt(1 - zeta * zeta)) * 100.0;
+                theoreticalTp = Math.PI / wd;
+                theoreticalTs = 4.0 / (zeta * wn);
+            } else {
+                theoreticalMp = 100.0; // 非減衰
+                theoreticalTp = Math.PI / wn;
+                theoreticalTs = Infinity;
+            }
+        }
+
+        const stepForce = this.params.stepForceMSD;
+        const xFinal = stepForce / k;
+
+        return {
+            wn,
+            zeta,
+            wd,
+            theoreticalMp,
+            theoreticalTp,
+            theoreticalTs,
+            xFinal
+        };
+    }
+}
+
+/**
  * app.js - メインアプリケーション制御・イベントハンドリング・ゲームループ
  * （振子モータ制御系 & マス・バネ・ダンパー系 & 正弦波周波数応答ボード線図 完全対応）
  */
+
 
 
 
@@ -4238,6 +4883,9 @@ class ControlApp {
         // 周波数応答・ボード線図
         this.bodeAnalyzer = new BodeAnalyzer();
         this.activeSecondaryChart = 'phase'; // 'phase' | 'bode'
+
+        // 過渡応答（インパルス / ステップ）
+        this.transientManager = new TransientManager();
 
         // Canvas要素
         this.simCanvas = document.getElementById('simCanvas');
@@ -4320,6 +4968,7 @@ class ControlApp {
         this.updateMSDParamUI();
         this.updatePIDUI();
         this.updateBodeUI();
+        this.updateTransientUI();
 
         this.handleResize();
         requestAnimationFrame((t) => this.loop(t));
@@ -4402,14 +5051,37 @@ class ControlApp {
         // ドライブモード切替DOM
         this.btnDriveManual = document.getElementById('drive-manual');
         this.btnDriveAuto = document.getElementById('drive-auto');
+        this.btnDriveTransient = document.getElementById('drive-transient');
         this.btnDriveBode = document.getElementById('drive-bode');
         this.pidStatusBadge = document.getElementById('pid-status-badge');
+        this.transientStatusBadge = document.getElementById('transient-status-badge');
         this.bodeStatusBadge = document.getElementById('bode-status-badge');
         this.manualModeToggles = document.getElementById('manual-mode-toggles');
 
         // パネル切替DOM
         this.manualControlsPanel = document.getElementById('manual-controls-panel');
+        this.transientControlsPanel = document.getElementById('transient-controls-panel');
         this.bodeControlsPanel = document.getElementById('bode-controls-panel');
+
+        // クイック加振ボタン
+        this.btnQuickImpulse = document.getElementById('btn-quick-impulse');
+        this.btnQuickStep = document.getElementById('btn-quick-step');
+
+        // 過渡応答コントロールDOM
+        this.btnTrStepOpen = document.getElementById('btn-tr-step-open');
+        this.btnTrStepClosed = document.getElementById('btn-tr-step-closed');
+        this.btnTrImpulse = document.getElementById('btn-tr-impulse');
+        this.paramTransientInput = document.getElementById('param-transient-input');
+        this.valTransientParam = document.getElementById('val-transient-param');
+        this.transientParamLabel = document.getElementById('transient-param-label');
+        this.transientTheoryText = document.getElementById('transient-theory-text');
+        this.transientTheoryStatus = document.getElementById('val-transient-theory-status');
+        this.transientHudMp = document.getElementById('transient-hud-mp');
+        this.transientHudTr = document.getElementById('transient-hud-tr');
+        this.transientHudTs = document.getElementById('transient-hud-ts');
+        this.btnTransientStart = document.getElementById('btn-transient-start');
+        this.btnTransientImpulseHit = document.getElementById('btn-transient-impulse-hit');
+        this.btnTransientReset = document.getElementById('btn-transient-reset');
 
         // 正弦波コントロールDOM
         this.paramBodeOmega = document.getElementById('param-bode-omega');
@@ -4461,8 +5133,48 @@ class ControlApp {
         // ドライブモード切替
         this.btnDriveManual.addEventListener('click', () => this.setDriveMode('manual'));
         this.btnDriveAuto.addEventListener('click', () => this.setDriveMode('auto'));
+        if (this.btnDriveTransient) {
+            this.btnDriveTransient.addEventListener('click', () => this.setDriveMode('transient'));
+        }
         if (this.btnDriveBode) {
             this.btnDriveBode.addEventListener('click', () => this.setDriveMode('bode'));
+        }
+
+        // クイック加振ボタン
+        if (this.btnQuickImpulse) {
+            this.btnQuickImpulse.addEventListener('click', () => this.applyQuickImpulse());
+        }
+        if (this.btnQuickStep) {
+            this.btnQuickStep.addEventListener('click', () => this.applyQuickStep());
+        }
+
+        // 過渡応答サブタブ
+        if (this.btnTrStepOpen) {
+            this.btnTrStepOpen.addEventListener('click', () => this.setTransientType('step_open'));
+        }
+        if (this.btnTrStepClosed) {
+            this.btnTrStepClosed.addEventListener('click', () => this.setTransientType('step_closed'));
+        }
+        if (this.btnTrImpulse) {
+            this.btnTrImpulse.addEventListener('click', () => this.setTransientType('impulse'));
+        }
+
+        // 過渡応答パラメータ入力
+        if (this.paramTransientInput) {
+            this.paramTransientInput.addEventListener('input', (e) => {
+                this.onTransientParamChange(parseFloat(e.target.value));
+            });
+        }
+
+        // 過渡応答アクションボタン
+        if (this.btnTransientStart) {
+            this.btnTransientStart.addEventListener('click', () => this.startTransientExperiment());
+        }
+        if (this.btnTransientImpulseHit) {
+            this.btnTransientImpulseHit.addEventListener('click', () => this.applyQuickImpulse());
+        }
+        if (this.btnTransientReset) {
+            this.btnTransientReset.addEventListener('click', () => this.resetSimulation());
         }
 
         // グラフサブタブ切替（相平面 ⇔ ボード線図）
@@ -4746,6 +5458,7 @@ class ControlApp {
 
         this.updatePIDUI();
         this.updateBodeUI();
+        this.updateTransientUI();
         this.handleResize();
     }
 
@@ -4753,20 +5466,25 @@ class ControlApp {
         this.driveMode = mode;
         const isAuto = mode === 'auto';
         const isBode = mode === 'bode';
+        const isTransient = mode === 'transient';
         const isManual = mode === 'manual';
 
         this.btnDriveManual.classList.toggle('active', isManual);
         this.btnDriveAuto.classList.toggle('active', isAuto);
+        if (this.btnDriveTransient) this.btnDriveTransient.classList.toggle('active', isTransient);
         if (this.btnDriveBode) this.btnDriveBode.classList.toggle('active', isBode);
 
         this.pidStatusBadge.style.display = isAuto ? 'inline-flex' : 'none';
+        if (this.transientStatusBadge) this.transientStatusBadge.style.display = isTransient ? 'inline-flex' : 'none';
         if (this.bodeStatusBadge) this.bodeStatusBadge.style.display = isBode ? 'inline-flex' : 'none';
 
         // パネルの表示切り替え
-        if (this.manualControlsPanel) this.manualControlsPanel.style.display = isBode ? 'none' : 'block';
+        if (this.manualControlsPanel) this.manualControlsPanel.style.display = (isManual || isAuto) ? 'block' : 'none';
+        if (this.transientControlsPanel) this.transientControlsPanel.style.display = isTransient ? 'flex' : 'none';
         if (this.bodeControlsPanel) this.bodeControlsPanel.style.display = isBode ? 'flex' : 'none';
 
         this.charts.setBodeMode(isBode);
+        this.charts.setTransientMode(isTransient);
 
         if (isBode) {
             // 正弦波モード選択時は自動でボード線図サブタブへ切り替え
@@ -4778,6 +5496,10 @@ class ControlApp {
             this.bodeAnalyzer.setOmega(wn);
             if (this.paramBodeOmega) this.paramBodeOmega.value = wn.toFixed(2);
             this.updateBodeUI();
+        } else if (isTransient) {
+            this.bodeAnalyzer.stopSweep();
+            this.updateTransientUI();
+            this.startTransientExperiment();
         } else if (isAuto) {
             this.pendulumPid.reset();
             this.msdPid.reset();
@@ -4788,6 +5510,154 @@ class ControlApp {
                 this.appliedTau = 0.0;
                 this.appliedForce = 0.0;
             }
+        }
+    }
+
+    setTransientType(type) {
+        this.transientManager.setResponseType(type);
+        if (this.btnTrStepOpen) this.btnTrStepOpen.classList.toggle('active', type === 'step_open');
+        if (this.btnTrStepClosed) this.btnTrStepClosed.classList.toggle('active', type === 'step_closed');
+        if (this.btnTrImpulse) this.btnTrImpulse.classList.toggle('active', type === 'impulse');
+
+        this.updateTransientUI();
+        this.startTransientExperiment();
+    }
+
+    onTransientParamChange(val) {
+        const isPendulum = this.activeSystem === 'pendulum';
+        const type = this.transientManager.responseType;
+
+        if (type === 'impulse') {
+            if (isPendulum) this.transientManager.params.impulsePendulum = val;
+            else this.transientManager.params.impulseMSD = val;
+        } else if (type === 'step_open') {
+            if (isPendulum) this.transientManager.params.stepTorquePendulum = val;
+            else this.transientManager.params.stepForceMSD = val;
+        } else if (type === 'step_closed') {
+            if (isPendulum) this.transientManager.params.stepTargetPendulum = val;
+            else this.transientManager.params.stepTargetMSD = val;
+        }
+
+        this.updateTransientUI();
+    }
+
+    startTransientExperiment() {
+        this.charts.clear();
+        const isPendulum = this.activeSystem === 'pendulum';
+        const physics = isPendulum ? this.physics : this.msdPhysics;
+        const pid = isPendulum ? this.pendulumPid : this.msdPid;
+
+        this.transientManager.startExperiment(this.activeSystem, physics, pid);
+        this.updateTransientUI();
+    }
+
+    applyQuickImpulse() {
+        const isPendulum = this.activeSystem === 'pendulum';
+        const physics = isPendulum ? this.physics : this.msdPhysics;
+        this.transientManager.applyImpulse(physics, this.activeSystem);
+        this.updateTransientUI();
+    }
+
+    applyQuickStep() {
+        const isPendulum = this.activeSystem === 'pendulum';
+        if (this.driveMode === 'auto') {
+            if (isPendulum) {
+                this.physics.targetAngleDeg = (this.physics.targetAngleDeg === 180 ? -180 : (this.physics.targetAngleDeg === 90 ? -90 : 90));
+                if (this.inputs.targetDeg) this.inputs.targetDeg.value = this.physics.targetAngleDeg;
+                if (this.inputs.targetDegVal) this.inputs.targetDegVal.textContent = this.physics.targetAngleDeg + '°';
+            } else {
+                this.msdPhysics.targetX = -this.msdPhysics.targetX;
+                if (Math.abs(this.msdPhysics.targetX) < 0.1) this.msdPhysics.targetX = 0.5;
+                if (this.msdInputs.targetX) this.msdInputs.targetX.value = this.msdPhysics.targetX;
+                const sign = this.msdPhysics.targetX > 0 ? '+' : '';
+                if (this.msdInputs.targetXVal) this.msdInputs.targetXVal.textContent = `${sign}${this.msdPhysics.targetX.toFixed(2)} m`;
+            }
+        } else if (this.driveMode === 'transient') {
+            this.startTransientExperiment();
+        } else {
+            // Manual時: 出力を反転またはステップ
+            if (isPendulum) {
+                this.appliedTau = (this.appliedTau === 0) ? this.physics.tauMax * 0.5 : -this.appliedTau;
+            } else {
+                this.appliedForce = (this.appliedForce === 0) ? this.msdPhysics.fMax * 0.5 : -this.appliedForce;
+            }
+        }
+    }
+
+    updateTransientUI() {
+        const isPendulum = this.activeSystem === 'pendulum';
+        const type = this.transientManager.responseType;
+        const tm = this.transientManager;
+
+        // スライダーのラベル・範囲・値の更新
+        if (this.transientParamLabel && this.paramTransientInput && this.valTransientParam) {
+            if (type === 'impulse') {
+                this.transientParamLabel.textContent = isPendulum ? 'インパルス撃力トルク (I_tau)' : 'インパルス撃力力積 (I)';
+                const maxVal = isPendulum ? 15.0 : 10.0;
+                const currentVal = isPendulum ? tm.params.impulsePendulum : tm.params.impulseMSD;
+                this.paramTransientInput.min = 0.5;
+                this.paramTransientInput.max = maxVal;
+                this.paramTransientInput.step = 0.5;
+                this.paramTransientInput.value = currentVal;
+                this.valTransientParam.textContent = `${currentVal.toFixed(1)} ${isPendulum ? 'Nm·s' : 'N·s'}`;
+            } else if (type === 'step_open') {
+                this.transientParamLabel.textContent = isPendulum ? '外力ステップトルク (τ_step)' : '外力ステップ外力 (F_step)';
+                const maxVal = isPendulum ? this.physics.tauMax : this.msdPhysics.fMax;
+                const currentVal = isPendulum ? tm.params.stepTorquePendulum : tm.params.stepForceMSD;
+                this.paramTransientInput.min = 1.0;
+                this.paramTransientInput.max = maxVal;
+                this.paramTransientInput.step = 0.5;
+                this.paramTransientInput.value = currentVal;
+                this.valTransientParam.textContent = `${currentVal.toFixed(1)} ${isPendulum ? 'Nm' : 'N'}`;
+            } else if (type === 'step_closed') {
+                this.transientParamLabel.textContent = isPendulum ? '目標ステップ角度 (θ_ref)' : '目標ステップ位置 (x_ref)';
+                if (isPendulum) {
+                    this.paramTransientInput.min = 30;
+                    this.paramTransientInput.max = 180;
+                    this.paramTransientInput.step = 15;
+                    this.paramTransientInput.value = tm.params.stepTargetPendulum;
+                    this.valTransientParam.textContent = `${tm.params.stepTargetPendulum.toFixed(0)}°`;
+                } else {
+                    this.paramTransientInput.min = 0.1;
+                    this.paramTransientInput.max = 0.8;
+                    this.paramTransientInput.step = 0.05;
+                    this.paramTransientInput.value = tm.params.stepTargetMSD;
+                    this.valTransientParam.textContent = `${tm.params.stepTargetMSD.toFixed(2)} m`;
+                }
+            }
+        }
+
+        // 理論予測テキストの更新
+        if (this.transientTheoryText) {
+            if (!isPendulum) {
+                const props = tm.getMSDTheoreticalProperties(this.msdPhysics);
+                if (type === 'step_open') {
+                    const mpText = props.theoreticalMp > 0 ? `+${props.theoreticalMp.toFixed(1)}%` : '0%';
+                    const tsText = isFinite(props.theoreticalTs) ? `${props.theoreticalTs.toFixed(2)}s` : '∞';
+                    this.transientTheoryText.textContent = `理論最終値: ${props.xFinal.toFixed(2)}m | 理論Mp: ${mpText} | 理論ts: ${tsText}`;
+                } else if (type === 'impulse') {
+                    const period = (2 * Math.PI / props.wd).toFixed(2);
+                    this.transientTheoryText.textContent = `固有角周波数 ωn: ${props.wn.toFixed(2)} rad/s | 減衰比 ζ: ${props.zeta.toFixed(2)} | 減衰周期 Td: ${period}s`;
+                } else {
+                    this.transientTheoryText.textContent = `PID目標位置: ${tm.params.stepTargetMSD.toFixed(2)}m (Kp=${this.msdPid.kp}, Ki=${this.msdPid.ki}, Kd=${this.msdPid.kd})`;
+                }
+            } else {
+                this.transientTheoryText.textContent = isPendulum ? '振子モータ非線形力学系' : '';
+            }
+        }
+
+        // HUDバッジの更新
+        if (this.transientHudMp) {
+            const mp = tm.metrics.overshootPercent;
+            this.transientHudMp.textContent = (mp !== null && mp > 0) ? `Mp: +${mp.toFixed(1)}%` : 'Mp: --%';
+        }
+        if (this.transientHudTr) {
+            const tr = tm.metrics.riseTime;
+            this.transientHudTr.textContent = tr !== null ? `tr: ${tr.toFixed(2)}s` : 'tr: --s';
+        }
+        if (this.transientHudTs) {
+            const ts = tm.metrics.settlingTime;
+            this.transientHudTs.textContent = ts !== null ? `ts: ${ts.toFixed(2)}s` : (tm.metrics.isSettled ? 'ts: 整定済' : 'ts: --s');
         }
     }
 
@@ -5133,6 +6003,29 @@ class ControlApp {
      * トルクまたは入力外力の更新およびスライダーUI同期
      */
     updateAppliedInput(dt) {
+        if (this.driveMode === 'transient') {
+            const isPendulum = this.activeSystem === 'pendulum';
+            const physics = isPendulum ? this.physics : this.msdPhysics;
+            const pid = isPendulum ? this.pendulumPid : this.msdPid;
+
+            const u = this.transientManager.computeInput(dt, physics, this.activeSystem, pid);
+
+            if (isPendulum) {
+                this.appliedTau = u;
+                if (!this.isDragging) {
+                    this.physics.update(dt, u);
+                }
+            } else {
+                this.appliedForce = u;
+                if (!this.isDragging) {
+                    this.msdPhysics.update(dt, u);
+                }
+            }
+
+            this.updateTransientUI();
+            return;
+        }
+
         if (this.driveMode === 'bode') {
             // 正弦波モード: BodeAnalyzerからの加振信号 u(t) を入力
             const u = this.bodeAnalyzer.updateInput(dt);
@@ -5452,10 +6345,10 @@ class ControlApp {
 
         if (this.activeSystem === 'pendulum') {
             this.renderer.draw(this.physics, status);
-            this.charts.render(this.physics, this.bodeAnalyzer);
+            this.charts.render(this.physics, this.bodeAnalyzer, this.transientManager);
         } else {
             this.msdRenderer.draw(this.msdPhysics, status);
-            this.charts.render(this.msdPhysics, this.bodeAnalyzer);
+            this.charts.render(this.msdPhysics, this.bodeAnalyzer, this.transientManager);
         }
 
         if (this.activeSecondaryChart === 'bode') {

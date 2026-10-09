@@ -86,18 +86,22 @@
 
             <!-- 操作パネル (Manual / Auto PID ＆ アナログ連続スライダー) -->
             <div class="control-bar">
-                <!-- モード切替バー: Manual (手動) vs Auto (PID自動制御) vs Bode (周波数応答) -->
+                <!-- モード切替バー: Manual (手動) vs Auto (PID自動制御) vs Transient (過渡応答) vs Bode (周波数応答) -->
                 <div class="drive-mode-bar">
                     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                         <span style="font-size: 0.85rem; font-weight: 700; color: var(--text-secondary);">モード:</span>
                         <div class="drive-toggle-group">
                             <button id="drive-manual" class="btn-drive active" title="人間による手動操作">🎮 Manual (手動)</button>
                             <button id="drive-auto" class="btn-drive" title="PIDコントローラによる目標値への自動位置制御">🤖 Auto (PID制御)</button>
+                            <button id="drive-transient" class="btn-drive" title="インパルス応答およびステップ応答の過渡特性測定">⚡ ステップ / インパルス</button>
                             <button id="drive-bode" class="btn-drive" title="正弦波入力とボード線図周波数応答">〰️ 正弦波 (周波数応答)</button>
                         </div>
                     </div>
                     <div id="pid-status-badge" class="pid-status-badge" style="display: none;">
                         <span class="pulse-dot"></span> PID稼働中
+                    </div>
+                    <div id="transient-status-badge" class="pid-status-badge" style="display: none; background: rgba(245, 158, 11, 0.15); border-color: #f59e0b; color: #f59e0b;">
+                        <span class="pulse-dot" style="background: #f59e0b;"></span> 過渡応答測定中
                     </div>
                     <div id="bode-status-badge" class="pid-status-badge" style="display: none; background: rgba(14, 165, 233, 0.15); border-color: #38bdf8; color: #38bdf8;">
                         <span class="pulse-dot" style="background: #38bdf8;"></span> 正弦波加振中
@@ -147,10 +151,75 @@
                         <div class="nudge-buttons">
                             <button id="btn-nudge-left" class="btn btn-sm" title="出力を左/引張方向に増やす">◀ 微動 (-)</button>
                             <button id="btn-nudge-right" class="btn btn-sm" title="出力を右/押出方向に増やす">微動 (+) ▶</button>
+                            <button id="btn-quick-impulse" class="btn btn-sm" style="color: #f43f5e; border-color: rgba(244, 63, 94, 0.4);" title="現在の状態に一瞬の撃力（インパルス）を加えます">⚡ 撃力 (Impulse)</button>
+                            <button id="btn-quick-step" class="btn btn-sm" style="color: #f59e0b; border-color: rgba(245, 158, 11, 0.4);" title="目標値または入力をステップ加振します">📈 ステップ</button>
                         </div>
                         <div class="control-hints">
                             💡 <b>スワイプ / ドラッグ</b>で無段階調整 | <b>マウスホイール</b>で微調整 | <b>[←] [→]</b> スムーズ加速
                         </div>
+                    </div>
+                </div>
+
+                <!-- 過渡応答・ステップ＆インパルス コントロールパネル -->
+                <div id="transient-controls-panel" class="bode-control-panel" style="display: none;">
+                    <div class="bode-header-row">
+                        <div class="bode-status-title">
+                            <span class="pulse-dot" style="background: #f59e0b;"></span>
+                            <span style="font-weight: 700; color: #f59e0b;">ステップ応答 ＆ インパルス応答 実験</span>
+                        </div>
+                        <div class="bode-hud-badges">
+                            <span id="transient-hud-mp" class="badge-hud">Mp: --%</span>
+                            <span id="transient-hud-tr" class="badge-hud">tr: --s</span>
+                            <span id="transient-hud-ts" class="badge-hud">ts: --s</span>
+                        </div>
+                    </div>
+
+                    <!-- 応答タイプ切替サブタブ -->
+                    <div class="transient-type-tabs">
+                        <button id="btn-tr-step-open" class="btn-subtab active" title="一定の外力/トルクを印加し続ける開ループステップ応答">📈 外力ステップ (開ループ)</button>
+                        <button id="btn-tr-step-closed" class="btn-subtab" title="PID制御で目標値へジャンプさせる閉ループステップ応答">🤖 目標ステップ (PID閉ループ)</button>
+                        <button id="btn-tr-impulse" class="btn-subtab" title="瞬間的な撃力(力積)を与えて自由減衰振動を観察するインパルス応答">⚡ インパルス応答 (撃力)</button>
+                    </div>
+
+                    <div class="bode-params-grid">
+                        <!-- 入力大きさスライダー -->
+                        <div class="bode-param-item">
+                            <div class="param-header">
+                                <span class="param-name" id="transient-param-label">ステップ外力 (F_step)</span>
+                                <span id="val-transient-param" class="param-value" style="color: var(--accent-yellow);">6.0 N</span>
+                            </div>
+                            <div class="param-slider-row">
+                                <input id="param-transient-input" type="range" min="1.0" max="25.0" step="0.5" value="6.0">
+                            </div>
+                        </div>
+
+                        <!-- 制御理論による予測表示 -->
+                        <div class="bode-param-item" style="display: flex; flex-direction: column; justify-content: center; background: rgba(15, 23, 42, 0.6); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border);">
+                            <div class="param-header">
+                                <span class="param-name" style="font-weight: 700; color: #10b981;">制御理論による理論予測値</span>
+                                <span id="val-transient-theory-status" class="param-value" style="font-size: 0.72rem; color: #10b981;">理論計算OK</span>
+                            </div>
+                            <div id="transient-theory-text" style="font-size: 0.76rem; color: var(--text-secondary); margin-top: 4px; line-height: 1.4; font-family: var(--font-mono);">
+                                理論最終値: 0.50m | 理論Mp: +28.1% | 理論ts: 3.8s
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- アクションボタン群 -->
+                    <div class="bode-actions-row">
+                        <button id="btn-transient-start" class="btn btn-primary" style="background: #f59e0b; border-color: #d97706; color: #0f172a; font-weight: 700;" title="初期状態にリセットして応答測定を開始します">
+                            ▶ 実験開始 (0秒から再実行)
+                        </button>
+                        <button id="btn-transient-impulse-hit" class="btn" title="現在の状態のまま瞬間的な撃力を追加します">
+                            ⚡ 撃力を追加 (小突く)
+                        </button>
+                        <button id="btn-transient-reset" class="btn" title="初期状態にリセットします">
+                            ↺ リセット
+                        </button>
+                    </div>
+
+                    <div class="control-hints" style="margin-top: 8px;">
+                        💡 <b>[▶ 実験開始]</b> で0秒から応答を綺麗に記録 | グラフ上に <b>最大オーバーシュート(Mp)・立上時間(tr)・整定時間(ts)</b> を自動描画！
                     </div>
                 </div>
 
@@ -530,6 +599,37 @@
                     <button class="btn btn-sm btn-pid-preset" data-kp="20" data-ki="0" data-kd="0">2. P制御のみ (定常偏差を観察！)</button>
                     <button class="btn btn-sm btn-pid-preset" data-kp="30" data-ki="0" data-kd="10">3. PD制御 (制動重視・オーバーシュート小)</button>
                     <button class="btn btn-sm btn-pid-preset" data-kp="20" data-ki="14" data-kd="0">4. PI制御 (定常偏差ゼロ・振動的)</button>
+                </div>
+            </div>
+
+            <!-- 過渡応答（インパルス応答・ステップ応答）学習ヒントカード -->
+            <div class="card bode-study-panel" style="grid-column: 1 / -1;">
+                <div class="card-title">
+                    <span>過渡応答（インパルス・ステップ）の物理的・制御工学的意味</span>
+                    <span style="font-size: 0.72rem; color: #f59e0b;">g(t) = L⁻¹[G(s)] &amp; y(t) = L⁻¹[G(s)/s]</span>
+                </div>
+                <div style="font-size: 0.8rem; line-height: 1.6; color: var(--text-secondary);">
+                    <p style="margin-bottom: 8px;">
+                        システムの伝達関数 $G(s)$ の本質を知る代表的な試験信号が「インパルス入力 $\delta(t)$」と「ステップ入力 $1(t)$」です。
+                    </p>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 10px;">
+                        <div style="background: #0b0f19; padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                            <strong style="color: #f43f5e; font-size: 0.85rem;">⚡ インパルス応答 (Impulse Response)</strong><br>
+                            <span style="font-family: var(--font-mono); font-size: 0.78rem; color: #f8fafc;">g(t) = 瞬間的な撃力 (力積 I) に対する応答</span>
+                            <ul style="margin-top: 6px; padding-left: 18px; font-size: 0.76rem; color: var(--text-muted); line-height: 1.5;">
+                                <li><b>物理的解釈</b>: 静止した系をハンマー等で一瞬叩き、初期速度を与えた後の<b>自由減衰振動挙動</b>。</li>
+                                <li><b>固有角周波数 ωn と減衰比 ζ</b>: 不足減衰($\zeta < 1$)では減衰周期 $T_d = 2\pi / (\omega_n \sqrt{1-\zeta^2})$ で振動し、振幅は $e^{-\zeta \omega_n t}$ で包絡減衰します。臨界減衰($\zeta = 1$)では振動せず最速で静止します。</li>
+                            </ul>
+                        </div>
+                        <div style="background: #0b0f19; padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                            <strong style="color: #f59e0b; font-size: 0.85rem;">📈 ステップ応答 (Step Response)</strong><br>
+                            <span style="font-family: var(--font-mono); font-size: 0.78rem; color: #f8fafc;">y(t) = 一定入力への過渡応答 (インパルス積分の関係)</span>
+                            <ul style="margin-top: 6px; padding-left: 18px; font-size: 0.76rem; color: var(--text-muted); line-height: 1.5;">
+                                <li><b>行き過ぎ量 (オーバーシュート Mp)</b>: 目標値・最終値を超過するピーク割合。理論値は $M_p = e^{-\pi \zeta / \sqrt{1-\zeta^2}} \times 100\%$。</li>
+                                <li><b>立上り時間 tr &amp; 整定時間 ts</b>: どれだけ速く立ち上がり、目標値の $\pm 2\%$ 以内に安定するかを評価。PIDの $K_p, K_i, K_d$ 設計の直接的な指標になります。</li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
             </div>
 

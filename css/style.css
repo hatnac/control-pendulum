@@ -823,11 +823,22 @@ input[type="range"] {
     border: 1px solid var(--border);
 }
 
+/* 過渡応答サブタブ（外力ステップ ⇔ 目標ステップ ⇔ インパルス） */
+.transient-type-tabs {
+    display: flex;
+    gap: 6px;
+    background: #0b0f19;
+    padding: 4px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+
 .btn-subtab {
     background: transparent;
     border: none;
     color: var(--text-secondary);
-    padding: 3px 8px;
+    padding: 4px 10px;
     border-radius: 4px;
     font-size: 0.74rem;
     font-weight: 600;
@@ -843,6 +854,11 @@ input[type="range"] {
     background: var(--bg-card);
     color: #38bdf8;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.transient-type-tabs .btn-subtab.active {
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
 /* ========================================================

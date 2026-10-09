@@ -20,6 +20,7 @@ export class ControlCharts {
         // 現在のシステムモード ('pendulum' | 'msd')
         this.systemMode = 'pendulum';
         this.isBodeMode = false;
+        this.isTransientMode = false;
 
         // データ履歴バッファ
         this.maxHistory = 400; // 約6〜8秒分のデータ
@@ -41,7 +42,10 @@ export class ControlCharts {
             phaseDot: '#38bdf8',
             phaseLine: 'rgba(56, 189, 248, 0.4)',
             peakLine: 'rgba(234, 179, 8, 0.4)',
-            dtArrow: '#f59e0b'
+            dtArrow: '#f59e0b',
+            settleBand: 'rgba(234, 179, 8, 0.08)',
+            settleBorder: 'rgba(234, 179, 8, 0.25)',
+            impulseMarker: '#f43f5e'
         };
 
         this.resize();
@@ -65,6 +69,10 @@ export class ControlCharts {
 
     setBodeMode(isBode) {
         this.isBodeMode = isBode;
+    }
+
+    setTransientMode(isTransient) {
+        this.isTransientMode = isTransient;
     }
 
     resize() {
@@ -169,9 +177,10 @@ export class ControlCharts {
      * 両グラフを更新描画
      * @param {object} physics 
      * @param {object} bodeAnalyzer (任意: 正弦波周波数応答用)
+     * @param {object} transientManager (任意: 過渡応答用)
      */
-    render(physics, bodeAnalyzer = null) {
-        this.renderTimeHistory(physics, bodeAnalyzer);
+    render(physics, bodeAnalyzer = null, transientManager = null) {
+        this.renderTimeHistory(physics, bodeAnalyzer, transientManager);
         if (this.phaseCanvas && this.phaseCanvas.style.display !== 'none') {
             this.renderPhasePlane(physics);
         }
@@ -180,7 +189,7 @@ export class ControlCharts {
     /**
      * 時系列応答グラフ
      */
-    renderTimeHistory(physics, bodeAnalyzer = null) {
+    renderTimeHistory(physics, bodeAnalyzer = null, transientManager = null) {
         if (!this.tWidth || this.tWidth < 20 || !this.tHeight || this.tHeight < 20) {
             this.resize();
         }
@@ -194,6 +203,7 @@ export class ControlCharts {
 
         const isPendulum = this.systemMode === 'pendulum';
         const isBode = this.isBodeMode && bodeAnalyzer !== null;
+        const isTransient = this.isTransientMode && transientManager !== null;
 
         const padLeft = isPendulum ? 42 : 46;
         const padRight = 15;
@@ -263,6 +273,20 @@ export class ControlCharts {
                 ctx.fillStyle = '#eab308';
                 ctx.fillText(`|G|=${bodeAnalyzer.currentGainDb.toFixed(1)}dB  φ=${bodeAnalyzer.currentPhaseDeg.toFixed(0)}°`, padLeft + 185, padTop - 8);
             }
+        } else if (isTransient) {
+            // 過渡応答モードの凡例
+            ctx.fillStyle = this.colors.signal;
+            ctx.fillText(isPendulum ? '― 応答 θ(t)' : '― 応答 x(t)', padLeft + 6, padTop - 8);
+
+            if (transientManager.responseType === 'impulse') {
+                ctx.fillStyle = this.colors.impulseMarker;
+                ctx.fillText('⚡ インパルス撃力', padLeft + 85, padTop - 8);
+            } else {
+                ctx.fillStyle = this.colors.target;
+                ctx.fillText('--- 目標/定常値', padLeft + 85, padTop - 8);
+                ctx.fillStyle = this.colors.control;
+                ctx.fillText('― 入力', padLeft + 175, padTop - 8);
+            }
         } else {
             // 通常モードの凡例
             ctx.fillStyle = this.colors.signal;
@@ -275,8 +299,8 @@ export class ControlCharts {
 
         if (this.history.length < 2) return;
 
-        // 1. 目標値の破線プロット (通常モード時のみ)
-        if (!isBode) {
+        // 1. 目標値の破線プロット (通常モードおよび過渡ステップ時)
+        if (!isBode && (!isTransient || transientManager.responseType !== 'impulse')) {
             ctx.save();
             ctx.strokeStyle = this.colors.target;
             ctx.lineWidth = 1.5;
@@ -351,6 +375,136 @@ export class ControlCharts {
         if (isBode && bodeAnalyzer.currentAmpOut > 0.005) {
             this.drawBodeAnnotations(ctx, padLeft, plotW, plotH, zeroY, isPendulum, bodeAnalyzer);
         }
+
+        // 5. 過渡応答モード時のアノテーション
+        if (isTransient) {
+            this.drawTransientAnnotations(ctx, padLeft, plotW, plotH, zeroY, isPendulum, transientManager);
+        }
+    }
+
+    /**
+     * 過渡応答（インパルス / ステップ）のアノテーションおよびHUD描画
+     */
+    drawTransientAnnotations(ctx, padLeft, plotW, plotH, zeroY, isPendulum, tm) {
+        ctx.save();
+
+        const isImpulse = tm.responseType === 'impulse';
+        const targetVal = tm.targetFinal;
+        const metrics = tm.metrics;
+
+        // 値 -> Y座標変換ヘルパー
+        const valToY = (val) => {
+            if (isPendulum) {
+                return 22 + plotH * (1.0 - (val + 180) / 360);
+            } else {
+                const norm = (val - (-1.0)) / 2.0;
+                return 22 + plotH * (1.0 - Math.max(0, Math.min(1, norm)));
+            }
+        };
+
+        if (!isImpulse && Math.abs(targetVal - tm.y0) > 0.005) {
+            // ステップ応答のアノテーション
+            const yTarget = valToY(targetVal);
+            const stepMag = Math.abs(targetVal - tm.y0);
+            const bandVal = stepMag * tm.metrics.toleranceBand;
+            const yBandTop = valToY(targetVal + (targetVal >= tm.y0 ? bandVal : -bandVal));
+            const yBandBottom = valToY(targetVal - (targetVal >= tm.y0 ? bandVal : -bandVal));
+
+            // 1. ±2% 整定許容バンド
+            const bTop = Math.min(yBandTop, yBandBottom);
+            const bHeight = Math.abs(yBandBottom - yBandTop);
+            ctx.fillStyle = this.colors.settleBand;
+            ctx.fillRect(padLeft, bTop, plotW, Math.max(2, bHeight));
+
+            ctx.strokeStyle = this.colors.settleBorder;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([2, 4]);
+            ctx.beginPath();
+            ctx.moveTo(padLeft, bTop);
+            ctx.lineTo(padLeft + plotW, bTop);
+            ctx.moveTo(padLeft, bTop + bHeight);
+            ctx.lineTo(padLeft + plotW, bTop + bHeight);
+            ctx.stroke();
+
+            // バンドラベル
+            ctx.fillStyle = 'rgba(234, 179, 8, 0.5)';
+            ctx.font = '9px monospace';
+            ctx.textAlign = 'right';
+            ctx.fillText('±2%バンド', padLeft + plotW - 4, bTop - 3);
+
+            // 2. 最大オーバーシュート点 (ピーク) のマーカー
+            if (metrics.peakVal !== null && metrics.overshootPercent !== null && metrics.overshootPercent > 0.5) {
+                const yPeak = valToY(metrics.peakVal);
+                ctx.setLineDash([3, 3]);
+                ctx.strokeStyle = 'rgba(234, 179, 8, 0.45)';
+                ctx.beginPath();
+                ctx.moveTo(padLeft, yPeak);
+                ctx.lineTo(padLeft + plotW, yPeak);
+                ctx.stroke();
+
+                ctx.fillStyle = '#eab308';
+                ctx.font = '10px monospace';
+                ctx.textAlign = 'left';
+                ctx.fillText(`ピーク値: ${metrics.peakVal.toFixed(2)}${isPendulum ? '°' : 'm'} (Mp: +${metrics.overshootPercent.toFixed(1)}%)`, padLeft + 8, yPeak - 4);
+            }
+        }
+
+        // 3. インパルス応答時: 撃力印加マーカー
+        if (isImpulse && tm.lastImpulseTime >= 0) {
+            ctx.save();
+            ctx.fillStyle = this.colors.impulseMarker;
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('⚡ 撃力印加', padLeft + 40, zeroY - 20);
+            ctx.restore();
+        }
+
+        // 4. 右上 HUD オーバーレイ (過渡特性サマリー)
+        const hudW = 160;
+        const hudH = isImpulse ? 48 : 66;
+        const hudX = padLeft + plotW - hudW - 6;
+        const hudY = 26;
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([]);
+        ctx.fillRect(hudX, hudY, hudW, hudH);
+        ctx.strokeRect(hudX, hudY, hudW, hudH);
+
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = 'bold 9px monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText(isImpulse ? '【 インパルス過渡特性 】' : '【 ステップ過渡特性 】', hudX + 6, hudY + 12);
+
+        ctx.font = '9px monospace';
+        if (isImpulse) {
+            ctx.fillStyle = '#38bdf8';
+            const peakStr = metrics.peakVal !== null ? `${metrics.peakVal.toFixed(2)}${isPendulum ? '°' : 'm'}` : '--';
+            ctx.fillText(`最大応答 y_max: ${peakStr}`, hudX + 6, hudY + 26);
+            ctx.fillStyle = metrics.isSettled ? '#10b981' : '#94a3b8';
+            const tsStr = metrics.settlingTime !== null ? `${metrics.settlingTime.toFixed(2)}s` : (metrics.isSettled ? '整定済' : '過渡中...');
+            ctx.fillText(`整定時間 t_s:   ${tsStr}`, hudX + 6, hudY + 40);
+        } else {
+            // ステップ
+            ctx.fillStyle = (metrics.overshootPercent && metrics.overshootPercent > 0) ? '#eab308' : '#94a3b8';
+            const mpStr = metrics.overshootPercent !== null ? `${metrics.overshootPercent.toFixed(1)}%` : '--%';
+            ctx.fillText(`行き過ぎ量 Mp: ${mpStr}`, hudX + 6, hudY + 24);
+
+            ctx.fillStyle = metrics.riseTime !== null ? '#38bdf8' : '#94a3b8';
+            const trStr = metrics.riseTime !== null ? `${metrics.riseTime.toFixed(2)}s` : '--';
+            ctx.fillText(`立上時間 t_r:  ${trStr}`, hudX + 6, hudY + 36);
+
+            ctx.fillStyle = metrics.isSettled ? '#10b981' : '#94a3b8';
+            const tsStr = metrics.settlingTime !== null ? `${metrics.settlingTime.toFixed(2)}s` : (metrics.isSettled ? '整定済' : '過渡中...');
+            ctx.fillText(`整定時間 t_s:  ${tsStr}`, hudX + 6, hudY + 48);
+
+            ctx.fillStyle = '#cbd5e1';
+            const essStr = metrics.steadyStateError !== null ? `${metrics.steadyStateError.toFixed(3)}${isPendulum ? '°' : 'm'}` : '--';
+            ctx.fillText(`定常偏差 e_ss: ${essStr}`, hudX + 6, hudY + 60);
+        }
+
+        ctx.restore();
     }
 
     /**

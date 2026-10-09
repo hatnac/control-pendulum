@@ -11,6 +11,7 @@ import { ControlCharts } from './charts.js';
 import { PIDController } from './pid.js';
 import { BodeAnalyzer } from './bode.js';
 import { BodeRenderer } from './bode-renderer.js';
+import { TransientManager } from './transient.js';
 
 class ControlApp {
     constructor() {
@@ -32,6 +33,9 @@ class ControlApp {
         // 周波数応答・ボード線図
         this.bodeAnalyzer = new BodeAnalyzer();
         this.activeSecondaryChart = 'phase'; // 'phase' | 'bode'
+
+        // 過渡応答（インパルス / ステップ）
+        this.transientManager = new TransientManager();
 
         // Canvas要素
         this.simCanvas = document.getElementById('simCanvas');
@@ -114,6 +118,7 @@ class ControlApp {
         this.updateMSDParamUI();
         this.updatePIDUI();
         this.updateBodeUI();
+        this.updateTransientUI();
 
         this.handleResize();
         requestAnimationFrame((t) => this.loop(t));
@@ -196,14 +201,37 @@ class ControlApp {
         // ドライブモード切替DOM
         this.btnDriveManual = document.getElementById('drive-manual');
         this.btnDriveAuto = document.getElementById('drive-auto');
+        this.btnDriveTransient = document.getElementById('drive-transient');
         this.btnDriveBode = document.getElementById('drive-bode');
         this.pidStatusBadge = document.getElementById('pid-status-badge');
+        this.transientStatusBadge = document.getElementById('transient-status-badge');
         this.bodeStatusBadge = document.getElementById('bode-status-badge');
         this.manualModeToggles = document.getElementById('manual-mode-toggles');
 
         // パネル切替DOM
         this.manualControlsPanel = document.getElementById('manual-controls-panel');
+        this.transientControlsPanel = document.getElementById('transient-controls-panel');
         this.bodeControlsPanel = document.getElementById('bode-controls-panel');
+
+        // クイック加振ボタン
+        this.btnQuickImpulse = document.getElementById('btn-quick-impulse');
+        this.btnQuickStep = document.getElementById('btn-quick-step');
+
+        // 過渡応答コントロールDOM
+        this.btnTrStepOpen = document.getElementById('btn-tr-step-open');
+        this.btnTrStepClosed = document.getElementById('btn-tr-step-closed');
+        this.btnTrImpulse = document.getElementById('btn-tr-impulse');
+        this.paramTransientInput = document.getElementById('param-transient-input');
+        this.valTransientParam = document.getElementById('val-transient-param');
+        this.transientParamLabel = document.getElementById('transient-param-label');
+        this.transientTheoryText = document.getElementById('transient-theory-text');
+        this.transientTheoryStatus = document.getElementById('val-transient-theory-status');
+        this.transientHudMp = document.getElementById('transient-hud-mp');
+        this.transientHudTr = document.getElementById('transient-hud-tr');
+        this.transientHudTs = document.getElementById('transient-hud-ts');
+        this.btnTransientStart = document.getElementById('btn-transient-start');
+        this.btnTransientImpulseHit = document.getElementById('btn-transient-impulse-hit');
+        this.btnTransientReset = document.getElementById('btn-transient-reset');
 
         // 正弦波コントロールDOM
         this.paramBodeOmega = document.getElementById('param-bode-omega');
@@ -255,8 +283,48 @@ class ControlApp {
         // ドライブモード切替
         this.btnDriveManual.addEventListener('click', () => this.setDriveMode('manual'));
         this.btnDriveAuto.addEventListener('click', () => this.setDriveMode('auto'));
+        if (this.btnDriveTransient) {
+            this.btnDriveTransient.addEventListener('click', () => this.setDriveMode('transient'));
+        }
         if (this.btnDriveBode) {
             this.btnDriveBode.addEventListener('click', () => this.setDriveMode('bode'));
+        }
+
+        // クイック加振ボタン
+        if (this.btnQuickImpulse) {
+            this.btnQuickImpulse.addEventListener('click', () => this.applyQuickImpulse());
+        }
+        if (this.btnQuickStep) {
+            this.btnQuickStep.addEventListener('click', () => this.applyQuickStep());
+        }
+
+        // 過渡応答サブタブ
+        if (this.btnTrStepOpen) {
+            this.btnTrStepOpen.addEventListener('click', () => this.setTransientType('step_open'));
+        }
+        if (this.btnTrStepClosed) {
+            this.btnTrStepClosed.addEventListener('click', () => this.setTransientType('step_closed'));
+        }
+        if (this.btnTrImpulse) {
+            this.btnTrImpulse.addEventListener('click', () => this.setTransientType('impulse'));
+        }
+
+        // 過渡応答パラメータ入力
+        if (this.paramTransientInput) {
+            this.paramTransientInput.addEventListener('input', (e) => {
+                this.onTransientParamChange(parseFloat(e.target.value));
+            });
+        }
+
+        // 過渡応答アクションボタン
+        if (this.btnTransientStart) {
+            this.btnTransientStart.addEventListener('click', () => this.startTransientExperiment());
+        }
+        if (this.btnTransientImpulseHit) {
+            this.btnTransientImpulseHit.addEventListener('click', () => this.applyQuickImpulse());
+        }
+        if (this.btnTransientReset) {
+            this.btnTransientReset.addEventListener('click', () => this.resetSimulation());
         }
 
         // グラフサブタブ切替（相平面 ⇔ ボード線図）
@@ -540,6 +608,7 @@ class ControlApp {
 
         this.updatePIDUI();
         this.updateBodeUI();
+        this.updateTransientUI();
         this.handleResize();
     }
 
@@ -547,20 +616,25 @@ class ControlApp {
         this.driveMode = mode;
         const isAuto = mode === 'auto';
         const isBode = mode === 'bode';
+        const isTransient = mode === 'transient';
         const isManual = mode === 'manual';
 
         this.btnDriveManual.classList.toggle('active', isManual);
         this.btnDriveAuto.classList.toggle('active', isAuto);
+        if (this.btnDriveTransient) this.btnDriveTransient.classList.toggle('active', isTransient);
         if (this.btnDriveBode) this.btnDriveBode.classList.toggle('active', isBode);
 
         this.pidStatusBadge.style.display = isAuto ? 'inline-flex' : 'none';
+        if (this.transientStatusBadge) this.transientStatusBadge.style.display = isTransient ? 'inline-flex' : 'none';
         if (this.bodeStatusBadge) this.bodeStatusBadge.style.display = isBode ? 'inline-flex' : 'none';
 
         // パネルの表示切り替え
-        if (this.manualControlsPanel) this.manualControlsPanel.style.display = isBode ? 'none' : 'block';
+        if (this.manualControlsPanel) this.manualControlsPanel.style.display = (isManual || isAuto) ? 'block' : 'none';
+        if (this.transientControlsPanel) this.transientControlsPanel.style.display = isTransient ? 'flex' : 'none';
         if (this.bodeControlsPanel) this.bodeControlsPanel.style.display = isBode ? 'flex' : 'none';
 
         this.charts.setBodeMode(isBode);
+        this.charts.setTransientMode(isTransient);
 
         if (isBode) {
             // 正弦波モード選択時は自動でボード線図サブタブへ切り替え
@@ -572,6 +646,10 @@ class ControlApp {
             this.bodeAnalyzer.setOmega(wn);
             if (this.paramBodeOmega) this.paramBodeOmega.value = wn.toFixed(2);
             this.updateBodeUI();
+        } else if (isTransient) {
+            this.bodeAnalyzer.stopSweep();
+            this.updateTransientUI();
+            this.startTransientExperiment();
         } else if (isAuto) {
             this.pendulumPid.reset();
             this.msdPid.reset();
@@ -582,6 +660,154 @@ class ControlApp {
                 this.appliedTau = 0.0;
                 this.appliedForce = 0.0;
             }
+        }
+    }
+
+    setTransientType(type) {
+        this.transientManager.setResponseType(type);
+        if (this.btnTrStepOpen) this.btnTrStepOpen.classList.toggle('active', type === 'step_open');
+        if (this.btnTrStepClosed) this.btnTrStepClosed.classList.toggle('active', type === 'step_closed');
+        if (this.btnTrImpulse) this.btnTrImpulse.classList.toggle('active', type === 'impulse');
+
+        this.updateTransientUI();
+        this.startTransientExperiment();
+    }
+
+    onTransientParamChange(val) {
+        const isPendulum = this.activeSystem === 'pendulum';
+        const type = this.transientManager.responseType;
+
+        if (type === 'impulse') {
+            if (isPendulum) this.transientManager.params.impulsePendulum = val;
+            else this.transientManager.params.impulseMSD = val;
+        } else if (type === 'step_open') {
+            if (isPendulum) this.transientManager.params.stepTorquePendulum = val;
+            else this.transientManager.params.stepForceMSD = val;
+        } else if (type === 'step_closed') {
+            if (isPendulum) this.transientManager.params.stepTargetPendulum = val;
+            else this.transientManager.params.stepTargetMSD = val;
+        }
+
+        this.updateTransientUI();
+    }
+
+    startTransientExperiment() {
+        this.charts.clear();
+        const isPendulum = this.activeSystem === 'pendulum';
+        const physics = isPendulum ? this.physics : this.msdPhysics;
+        const pid = isPendulum ? this.pendulumPid : this.msdPid;
+
+        this.transientManager.startExperiment(this.activeSystem, physics, pid);
+        this.updateTransientUI();
+    }
+
+    applyQuickImpulse() {
+        const isPendulum = this.activeSystem === 'pendulum';
+        const physics = isPendulum ? this.physics : this.msdPhysics;
+        this.transientManager.applyImpulse(physics, this.activeSystem);
+        this.updateTransientUI();
+    }
+
+    applyQuickStep() {
+        const isPendulum = this.activeSystem === 'pendulum';
+        if (this.driveMode === 'auto') {
+            if (isPendulum) {
+                this.physics.targetAngleDeg = (this.physics.targetAngleDeg === 180 ? -180 : (this.physics.targetAngleDeg === 90 ? -90 : 90));
+                if (this.inputs.targetDeg) this.inputs.targetDeg.value = this.physics.targetAngleDeg;
+                if (this.inputs.targetDegVal) this.inputs.targetDegVal.textContent = this.physics.targetAngleDeg + '°';
+            } else {
+                this.msdPhysics.targetX = -this.msdPhysics.targetX;
+                if (Math.abs(this.msdPhysics.targetX) < 0.1) this.msdPhysics.targetX = 0.5;
+                if (this.msdInputs.targetX) this.msdInputs.targetX.value = this.msdPhysics.targetX;
+                const sign = this.msdPhysics.targetX > 0 ? '+' : '';
+                if (this.msdInputs.targetXVal) this.msdInputs.targetXVal.textContent = `${sign}${this.msdPhysics.targetX.toFixed(2)} m`;
+            }
+        } else if (this.driveMode === 'transient') {
+            this.startTransientExperiment();
+        } else {
+            // Manual時: 出力を反転またはステップ
+            if (isPendulum) {
+                this.appliedTau = (this.appliedTau === 0) ? this.physics.tauMax * 0.5 : -this.appliedTau;
+            } else {
+                this.appliedForce = (this.appliedForce === 0) ? this.msdPhysics.fMax * 0.5 : -this.appliedForce;
+            }
+        }
+    }
+
+    updateTransientUI() {
+        const isPendulum = this.activeSystem === 'pendulum';
+        const type = this.transientManager.responseType;
+        const tm = this.transientManager;
+
+        // スライダーのラベル・範囲・値の更新
+        if (this.transientParamLabel && this.paramTransientInput && this.valTransientParam) {
+            if (type === 'impulse') {
+                this.transientParamLabel.textContent = isPendulum ? 'インパルス撃力トルク (I_tau)' : 'インパルス撃力力積 (I)';
+                const maxVal = isPendulum ? 15.0 : 10.0;
+                const currentVal = isPendulum ? tm.params.impulsePendulum : tm.params.impulseMSD;
+                this.paramTransientInput.min = 0.5;
+                this.paramTransientInput.max = maxVal;
+                this.paramTransientInput.step = 0.5;
+                this.paramTransientInput.value = currentVal;
+                this.valTransientParam.textContent = `${currentVal.toFixed(1)} ${isPendulum ? 'Nm·s' : 'N·s'}`;
+            } else if (type === 'step_open') {
+                this.transientParamLabel.textContent = isPendulum ? '外力ステップトルク (τ_step)' : '外力ステップ外力 (F_step)';
+                const maxVal = isPendulum ? this.physics.tauMax : this.msdPhysics.fMax;
+                const currentVal = isPendulum ? tm.params.stepTorquePendulum : tm.params.stepForceMSD;
+                this.paramTransientInput.min = 1.0;
+                this.paramTransientInput.max = maxVal;
+                this.paramTransientInput.step = 0.5;
+                this.paramTransientInput.value = currentVal;
+                this.valTransientParam.textContent = `${currentVal.toFixed(1)} ${isPendulum ? 'Nm' : 'N'}`;
+            } else if (type === 'step_closed') {
+                this.transientParamLabel.textContent = isPendulum ? '目標ステップ角度 (θ_ref)' : '目標ステップ位置 (x_ref)';
+                if (isPendulum) {
+                    this.paramTransientInput.min = 30;
+                    this.paramTransientInput.max = 180;
+                    this.paramTransientInput.step = 15;
+                    this.paramTransientInput.value = tm.params.stepTargetPendulum;
+                    this.valTransientParam.textContent = `${tm.params.stepTargetPendulum.toFixed(0)}°`;
+                } else {
+                    this.paramTransientInput.min = 0.1;
+                    this.paramTransientInput.max = 0.8;
+                    this.paramTransientInput.step = 0.05;
+                    this.paramTransientInput.value = tm.params.stepTargetMSD;
+                    this.valTransientParam.textContent = `${tm.params.stepTargetMSD.toFixed(2)} m`;
+                }
+            }
+        }
+
+        // 理論予測テキストの更新
+        if (this.transientTheoryText) {
+            if (!isPendulum) {
+                const props = tm.getMSDTheoreticalProperties(this.msdPhysics);
+                if (type === 'step_open') {
+                    const mpText = props.theoreticalMp > 0 ? `+${props.theoreticalMp.toFixed(1)}%` : '0%';
+                    const tsText = isFinite(props.theoreticalTs) ? `${props.theoreticalTs.toFixed(2)}s` : '∞';
+                    this.transientTheoryText.textContent = `理論最終値: ${props.xFinal.toFixed(2)}m | 理論Mp: ${mpText} | 理論ts: ${tsText}`;
+                } else if (type === 'impulse') {
+                    const period = (2 * Math.PI / props.wd).toFixed(2);
+                    this.transientTheoryText.textContent = `固有角周波数 ωn: ${props.wn.toFixed(2)} rad/s | 減衰比 ζ: ${props.zeta.toFixed(2)} | 減衰周期 Td: ${period}s`;
+                } else {
+                    this.transientTheoryText.textContent = `PID目標位置: ${tm.params.stepTargetMSD.toFixed(2)}m (Kp=${this.msdPid.kp}, Ki=${this.msdPid.ki}, Kd=${this.msdPid.kd})`;
+                }
+            } else {
+                this.transientTheoryText.textContent = isPendulum ? '振子モータ非線形力学系' : '';
+            }
+        }
+
+        // HUDバッジの更新
+        if (this.transientHudMp) {
+            const mp = tm.metrics.overshootPercent;
+            this.transientHudMp.textContent = (mp !== null && mp > 0) ? `Mp: +${mp.toFixed(1)}%` : 'Mp: --%';
+        }
+        if (this.transientHudTr) {
+            const tr = tm.metrics.riseTime;
+            this.transientHudTr.textContent = tr !== null ? `tr: ${tr.toFixed(2)}s` : 'tr: --s';
+        }
+        if (this.transientHudTs) {
+            const ts = tm.metrics.settlingTime;
+            this.transientHudTs.textContent = ts !== null ? `ts: ${ts.toFixed(2)}s` : (tm.metrics.isSettled ? 'ts: 整定済' : 'ts: --s');
         }
     }
 
@@ -927,6 +1153,29 @@ class ControlApp {
      * トルクまたは入力外力の更新およびスライダーUI同期
      */
     updateAppliedInput(dt) {
+        if (this.driveMode === 'transient') {
+            const isPendulum = this.activeSystem === 'pendulum';
+            const physics = isPendulum ? this.physics : this.msdPhysics;
+            const pid = isPendulum ? this.pendulumPid : this.msdPid;
+
+            const u = this.transientManager.computeInput(dt, physics, this.activeSystem, pid);
+
+            if (isPendulum) {
+                this.appliedTau = u;
+                if (!this.isDragging) {
+                    this.physics.update(dt, u);
+                }
+            } else {
+                this.appliedForce = u;
+                if (!this.isDragging) {
+                    this.msdPhysics.update(dt, u);
+                }
+            }
+
+            this.updateTransientUI();
+            return;
+        }
+
         if (this.driveMode === 'bode') {
             // 正弦波モード: BodeAnalyzerからの加振信号 u(t) を入力
             const u = this.bodeAnalyzer.updateInput(dt);
@@ -1246,10 +1495,10 @@ class ControlApp {
 
         if (this.activeSystem === 'pendulum') {
             this.renderer.draw(this.physics, status);
-            this.charts.render(this.physics, this.bodeAnalyzer);
+            this.charts.render(this.physics, this.bodeAnalyzer, this.transientManager);
         } else {
             this.msdRenderer.draw(this.msdPhysics, status);
-            this.charts.render(this.msdPhysics, this.bodeAnalyzer);
+            this.charts.render(this.msdPhysics, this.bodeAnalyzer, this.transientManager);
         }
 
         if (this.activeSecondaryChart === 'bode') {
