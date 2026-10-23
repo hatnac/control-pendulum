@@ -139,4 +139,36 @@ tm.params.impulsePendulum = 2.0;
 tm.applyImpulse(pendulum, 'pendulum');
 assert(Math.abs(pendulum.omega) > 1.5, `振子にインパルス撃力が注入され角速度が発生: omega=${pendulum.omega.toFixed(2)} rad/s`);
 
+// -------------------------------------------------------------
+// Test 6: 減衰比プリセット (ζ=0, ζ=0.17, ζ=1.0, ζ=1.83) の理論値安全性検証
+// -------------------------------------------------------------
+console.log('\n--- Test 6: 減衰比プリセット (ζ=0, ζ=0.17, ζ=1.0, ζ=1.83) の理論値安全性検証 ---');
+const presets = [
+    { name: '不足減衰 (ζ≈0.17)', m: 1.0, k: 16.0, d: 1.4, expectedZeta: 0.175 },
+    { name: '臨界減衰 (ζ=1.00)', m: 1.0, k: 16.0, d: 8.0, expectedZeta: 1.0 },
+    { name: '過減衰 (ζ≈1.83)', m: 1.0, k: 9.0, d: 11.0, expectedZeta: 11.0 / 6.0 },
+    { name: '非減衰 (ζ=0.00)', m: 1.0, k: 16.0, d: 0.0, expectedZeta: 0.0 }
+];
+
+for (const p of presets) {
+    msd.m = p.m;
+    msd.k = p.k;
+    msd.d = p.d;
+    const th = tm.getMSDTheoreticalProperties(msd);
+    assertClose(th.zeta, p.expectedZeta, 1e-3, `${p.name}: zeta computed correctly`);
+    // theoreticalMp, theoreticalTp, theoreticalTs が null や未定義でなく安全な数値であること
+    assert(typeof th.theoreticalMp === 'number' && !isNaN(th.theoreticalMp), `${p.name}: theoreticalMp is valid number (${th.theoreticalMp})`);
+    assert(typeof th.theoreticalTs === 'number' && !isNaN(th.theoreticalTs), `${p.name}: theoreticalTs is valid number (${th.theoreticalTs})`);
+    if (th.zeta < 1.0 && th.zeta > 0) {
+        assert(th.theoreticalMp > 0, `${p.name}: Mp > 0 for underdamped`);
+        assert(typeof th.theoreticalTp === 'number' && isFinite(th.theoreticalTp), `${p.name}: Tp is finite`);
+    } else if (th.zeta >= 1.0) {
+        assert(th.theoreticalMp === 0, `${p.name}: Mp is 0 for critical/overdamped`);
+        assert(th.theoreticalTp === null, `${p.name}: Tp is null (no peak)`);
+    } else if (th.zeta === 0) {
+        assert(th.theoreticalMp === 100, `${p.name}: Mp is 100% for undamped`);
+        assert(th.theoreticalTs === Infinity, `${p.name}: Ts is Infinity for undamped`);
+    }
+}
+
 console.log('\n=== Verification Finished: ALL TRANSIENT TESTS PASSED ===');

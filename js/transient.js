@@ -345,16 +345,23 @@ export class TransientManager {
         let wd = wn;
 
         if (zeta < 1.0 && zeta >= 0) {
-            wd = wn * Math.sqrt(1 - zeta * zeta);
-            if (zeta > 0) {
+            wd = wn * Math.sqrt(Math.max(0, 1 - zeta * zeta));
+            if (zeta > 0.0001) {
                 theoreticalMp = Math.exp(-Math.PI * zeta / Math.sqrt(1 - zeta * zeta)) * 100.0;
-                theoreticalTp = Math.PI / wd;
+                theoreticalTp = wd > 0 ? Math.PI / wd : null;
                 theoreticalTs = 4.0 / (zeta * wn);
             } else {
                 theoreticalMp = 100.0; // 非減衰
-                theoreticalTp = Math.PI / wn;
+                theoreticalTp = wn > 0 ? Math.PI / wn : null;
                 theoreticalTs = Infinity;
             }
+        } else {
+            // 臨界減衰 (zeta=1) または 過減衰 (zeta>1)
+            theoreticalMp = 0.0;
+            theoreticalTp = null;
+            wd = 0.0;
+            const s1 = wn * (zeta - Math.sqrt(Math.max(0, zeta * zeta - 1)));
+            theoreticalTs = s1 > 0 ? (4.0 / s1) : null;
         }
 
         const stepForce = this.params.stepForceMSD;

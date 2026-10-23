@@ -187,7 +187,7 @@ export class BodeAnalyzer {
 
                 this.currentAmpOut = Math.sqrt(I * I + Q * Q);
                 const gain = this.currentAmpOut / Math.max(1e-4, this.amplitude);
-                this.currentGainDb = 20.0 * Math.log10(Math.max(1e-4, gain));
+                this.currentGainDb = Math.max(-100, Math.min(100, 20.0 * Math.log10(Math.max(1e-4, gain))));
 
                 // 位相: y(t) = I*sin(ωt) + Q*cos(ωt) => atan2(Q, I)
                 let phaseRad = Math.atan2(Q, I);
@@ -236,9 +236,9 @@ export class BodeAnalyzer {
             for (const w of omegaRange) {
                 const real = k - m * w * w;
                 const imag = d * w;
-                const denomMag = Math.sqrt(real * real + imag * imag);
+                const denomMag = Math.max(1e-6, Math.sqrt(real * real + imag * imag));
                 const gain = 1.0 / denomMag;
-                const gainDb = 20.0 * Math.log10(gain);
+                const gainDb = Math.max(-100, Math.min(100, 20.0 * Math.log10(Math.max(1e-6, gain))));
 
                 // 位相差: -atan2(imag, real)
                 let phaseRad = -Math.atan2(imag, real);
@@ -255,9 +255,9 @@ export class BodeAnalyzer {
             for (const w of omegaRange) {
                 const real = mgl - J * w * w;
                 const imag = c * w;
-                const denomMag = Math.sqrt(real * real + imag * imag);
+                const denomMag = Math.max(1e-6, Math.sqrt(real * real + imag * imag));
                 const gain = 1.0 / denomMag;
-                const gainDb = 20.0 * Math.log10(gain);
+                const gainDb = Math.max(-100, Math.min(100, 20.0 * Math.log10(Math.max(1e-6, gain))));
 
                 let phaseRad = -Math.atan2(imag, real);
                 let phaseDeg = phaseRad * (180.0 / Math.PI);

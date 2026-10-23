@@ -433,7 +433,9 @@ export class ControlCharts {
             ctx.fillText('±2%バンド', padLeft + plotW - 4, bTop - 3);
 
             // 2. 最大オーバーシュート点 (ピーク) のマーカー
-            if (metrics.peakVal !== null && metrics.overshootPercent !== null && metrics.overshootPercent > 0.5) {
+            if (typeof metrics.peakVal === 'number' && isFinite(metrics.peakVal) &&
+                typeof metrics.overshootPercent === 'number' && isFinite(metrics.overshootPercent) &&
+                metrics.overshootPercent > 0.5) {
                 const yPeak = valToY(metrics.peakVal);
                 ctx.setLineDash([3, 3]);
                 ctx.strokeStyle = 'rgba(234, 179, 8, 0.45)';
@@ -480,27 +482,33 @@ export class ControlCharts {
         ctx.font = '9px monospace';
         if (isImpulse) {
             ctx.fillStyle = '#38bdf8';
-            const peakStr = metrics.peakVal !== null ? `${metrics.peakVal.toFixed(2)}${isPendulum ? '°' : 'm'}` : '--';
+            const peakStr = (typeof metrics.peakVal === 'number' && isFinite(metrics.peakVal))
+                ? `${metrics.peakVal.toFixed(2)}${isPendulum ? '°' : 'm'}` : '--';
             ctx.fillText(`最大応答 y_max: ${peakStr}`, hudX + 6, hudY + 26);
             ctx.fillStyle = metrics.isSettled ? '#10b981' : '#94a3b8';
-            const tsStr = metrics.settlingTime !== null ? `${metrics.settlingTime.toFixed(2)}s` : (metrics.isSettled ? '整定済' : '過渡中...');
+            const tsStr = (typeof metrics.settlingTime === 'number' && isFinite(metrics.settlingTime))
+                ? `${metrics.settlingTime.toFixed(2)}s` : (metrics.isSettled ? '整定済' : '過渡中...');
             ctx.fillText(`整定時間 t_s:   ${tsStr}`, hudX + 6, hudY + 40);
         } else {
             // ステップ
-            ctx.fillStyle = (metrics.overshootPercent && metrics.overshootPercent > 0) ? '#eab308' : '#94a3b8';
-            const mpStr = metrics.overshootPercent !== null ? `${metrics.overshootPercent.toFixed(1)}%` : '--%';
+            ctx.fillStyle = (typeof metrics.overshootPercent === 'number' && metrics.overshootPercent > 0) ? '#eab308' : '#94a3b8';
+            const mpStr = (typeof metrics.overshootPercent === 'number' && isFinite(metrics.overshootPercent))
+                ? `${metrics.overshootPercent.toFixed(1)}%` : '--%';
             ctx.fillText(`行き過ぎ量 Mp: ${mpStr}`, hudX + 6, hudY + 24);
 
-            ctx.fillStyle = metrics.riseTime !== null ? '#38bdf8' : '#94a3b8';
-            const trStr = metrics.riseTime !== null ? `${metrics.riseTime.toFixed(2)}s` : '--';
+            ctx.fillStyle = (typeof metrics.riseTime === 'number' && isFinite(metrics.riseTime)) ? '#38bdf8' : '#94a3b8';
+            const trStr = (typeof metrics.riseTime === 'number' && isFinite(metrics.riseTime))
+                ? `${metrics.riseTime.toFixed(2)}s` : '--';
             ctx.fillText(`立上時間 t_r:  ${trStr}`, hudX + 6, hudY + 36);
 
             ctx.fillStyle = metrics.isSettled ? '#10b981' : '#94a3b8';
-            const tsStr = metrics.settlingTime !== null ? `${metrics.settlingTime.toFixed(2)}s` : (metrics.isSettled ? '整定済' : '過渡中...');
+            const tsStr = (typeof metrics.settlingTime === 'number' && isFinite(metrics.settlingTime))
+                ? `${metrics.settlingTime.toFixed(2)}s` : (metrics.isSettled ? '整定済' : '過渡中...');
             ctx.fillText(`整定時間 t_s:  ${tsStr}`, hudX + 6, hudY + 48);
 
             ctx.fillStyle = '#cbd5e1';
-            const essStr = metrics.steadyStateError !== null ? `${metrics.steadyStateError.toFixed(3)}${isPendulum ? '°' : 'm'}` : '--';
+            const essStr = (typeof metrics.steadyStateError === 'number' && isFinite(metrics.steadyStateError))
+                ? `${metrics.steadyStateError.toFixed(3)}${isPendulum ? '°' : 'm'}` : '--';
             ctx.fillText(`定常偏差 e_ss: ${essStr}`, hudX + 6, hudY + 60);
         }
 

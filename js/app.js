@@ -782,12 +782,26 @@ class ControlApp {
             if (!isPendulum) {
                 const props = tm.getMSDTheoreticalProperties(this.msdPhysics);
                 if (type === 'step_open') {
-                    const mpText = props.theoreticalMp > 0 ? `+${props.theoreticalMp.toFixed(1)}%` : '0%';
-                    const tsText = isFinite(props.theoreticalTs) ? `${props.theoreticalTs.toFixed(2)}s` : '∞';
+                    const mpText = (typeof props.theoreticalMp === 'number' && props.theoreticalMp > 0)
+                        ? `+${props.theoreticalMp.toFixed(1)}%`
+                        : (props.zeta >= 1.0 ? 'なし(0%)' : '0%');
+
+                    let tsText = '--';
+                    if (typeof props.theoreticalTs === 'number' && isFinite(props.theoreticalTs)) {
+                        tsText = `${props.theoreticalTs.toFixed(2)}s`;
+                    } else if (props.theoreticalTs === Infinity || props.zeta < 0.001) {
+                        tsText = '∞ (非減衰)';
+                    } else if (props.zeta >= 1.0) {
+                        tsText = '緩慢 (非振動)';
+                    }
                     this.transientTheoryText.textContent = `理論最終値: ${props.xFinal.toFixed(2)}m | 理論Mp: ${mpText} | 理論ts: ${tsText}`;
                 } else if (type === 'impulse') {
-                    const period = (2 * Math.PI / props.wd).toFixed(2);
-                    this.transientTheoryText.textContent = `固有角周波数 ωn: ${props.wn.toFixed(2)} rad/s | 減衰比 ζ: ${props.zeta.toFixed(2)} | 減衰周期 Td: ${period}s`;
+                    if (props.zeta < 1.0 && typeof props.wd === 'number' && props.wd > 0.001) {
+                        const period = (2 * Math.PI / props.wd).toFixed(2);
+                        this.transientTheoryText.textContent = `固有角周波数 ωn: ${props.wn.toFixed(2)} rad/s | 減衰比 ζ: ${props.zeta.toFixed(2)} | 減衰周期 Td: ${period}s`;
+                    } else {
+                        this.transientTheoryText.textContent = `固有角周波数 ωn: ${props.wn.toFixed(2)} rad/s | 減衰比 ζ: ${props.zeta.toFixed(2)} | 非振動減衰 (ζ≥1)`;
+                    }
                 } else {
                     this.transientTheoryText.textContent = `PID目標位置: ${tm.params.stepTargetMSD.toFixed(2)}m (Kp=${this.msdPid.kp}, Ki=${this.msdPid.ki}, Kd=${this.msdPid.kd})`;
                 }
@@ -796,18 +810,18 @@ class ControlApp {
             }
         }
 
-        // HUDバッジの更新
+        // HUDバッジの更新 (安全ガード付き)
         if (this.transientHudMp) {
             const mp = tm.metrics.overshootPercent;
-            this.transientHudMp.textContent = (mp !== null && mp > 0) ? `Mp: +${mp.toFixed(1)}%` : 'Mp: --%';
+            this.transientHudMp.textContent = (typeof mp === 'number' && isFinite(mp) && mp > 0) ? `Mp: +${mp.toFixed(1)}%` : 'Mp: --%';
         }
         if (this.transientHudTr) {
             const tr = tm.metrics.riseTime;
-            this.transientHudTr.textContent = tr !== null ? `tr: ${tr.toFixed(2)}s` : 'tr: --s';
+            this.transientHudTr.textContent = (typeof tr === 'number' && isFinite(tr)) ? `tr: ${tr.toFixed(2)}s` : 'tr: --s';
         }
         if (this.transientHudTs) {
             const ts = tm.metrics.settlingTime;
-            this.transientHudTs.textContent = ts !== null ? `ts: ${ts.toFixed(2)}s` : (tm.metrics.isSettled ? 'ts: 整定済' : 'ts: --s');
+            this.transientHudTs.textContent = (typeof ts === 'number' && isFinite(ts)) ? `ts: ${ts.toFixed(2)}s` : (tm.metrics.isSettled ? 'ts: 整定済' : 'ts: --s');
         }
     }
 
@@ -1386,6 +1400,10 @@ class ControlApp {
         this.updateParamUIFromPhysics();
         this.resetSimulation();
         this.updateBodeUI();
+        this.updateTransientUI();
+        if (this.driveMode === 'transient') {
+            this.startTransientExperiment();
+        }
     }
 
     applyMSDPreset(presetKey) {
@@ -1401,6 +1419,10 @@ class ControlApp {
         this.updateMSDParamUI();
         this.resetSimulation();
         this.updateBodeUI();
+        this.updateTransientUI();
+        if (this.driveMode === 'transient') {
+            this.startTransientExperiment();
+        }
     }
 
     updateParamUIFromPhysics() {
@@ -1466,46 +1488,50 @@ class ControlApp {
     }
 
     loop(timestamp) {
-        const elapsed = (timestamp - this.lastTimestamp) / 1000.0;
-        this.lastTimestamp = timestamp;
+        try {
+            const elapsed = (timestamp - this.lastTimestamp) / 1000.0;
+            this.lastTimestamp = timestamp;
 
-        const dt = Math.min(elapsed, 0.05);
+            const dt = Math.min(elapsed, 0.05);
 
-        if (!this.isPaused && dt > 0) {
-            this.updateAppliedInput(dt);
-            this.updateStabilization(dt);
+            if (!this.isPaused && dt > 0) {
+                this.updateAppliedInput(dt);
+                this.updateStabilization(dt);
 
-            this.chartSampleTimer += dt;
-            if (this.chartSampleTimer >= this.chartSampleInterval) {
-                if (this.activeSystem === 'pendulum') {
-                    this.charts.addSample(this.physics);
-                } else {
-                    this.charts.addSample(this.msdPhysics);
+                this.chartSampleTimer += dt;
+                if (this.chartSampleTimer >= this.chartSampleInterval) {
+                    if (this.activeSystem === 'pendulum') {
+                        this.charts.addSample(this.physics);
+                    } else {
+                        this.charts.addSample(this.msdPhysics);
+                    }
+                    this.chartSampleTimer = 0.0;
                 }
-                this.chartSampleTimer = 0.0;
             }
+
+            const status = {
+                holdingTime: this.holdingTime,
+                holdingProgress: Math.min(1.0, this.holdingTime / this.requiredHoldTime),
+                stabilized: this.stabilized,
+                isDragging: this.isDragging
+            };
+
+            if (this.activeSystem === 'pendulum') {
+                this.renderer.draw(this.physics, status);
+                this.charts.render(this.physics, this.bodeAnalyzer, this.transientManager);
+            } else {
+                this.msdRenderer.draw(this.msdPhysics, status);
+                this.charts.render(this.msdPhysics, this.bodeAnalyzer, this.transientManager);
+            }
+
+            if (this.activeSecondaryChart === 'bode') {
+                this.bodeRenderer.draw(this.bodeAnalyzer, this.activeSystem, this.currentPhysics);
+            }
+        } catch (err) {
+            console.error('Animation loop error:', err);
+        } finally {
+            requestAnimationFrame((t) => this.loop(t));
         }
-
-        const status = {
-            holdingTime: this.holdingTime,
-            holdingProgress: Math.min(1.0, this.holdingTime / this.requiredHoldTime),
-            stabilized: this.stabilized,
-            isDragging: this.isDragging
-        };
-
-        if (this.activeSystem === 'pendulum') {
-            this.renderer.draw(this.physics, status);
-            this.charts.render(this.physics, this.bodeAnalyzer, this.transientManager);
-        } else {
-            this.msdRenderer.draw(this.msdPhysics, status);
-            this.charts.render(this.msdPhysics, this.bodeAnalyzer, this.transientManager);
-        }
-
-        if (this.activeSecondaryChart === 'bode') {
-            this.bodeRenderer.draw(this.bodeAnalyzer, this.activeSystem, this.currentPhysics);
-        }
-
-        requestAnimationFrame((t) => this.loop(t));
     }
 }
 
