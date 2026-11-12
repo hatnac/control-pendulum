@@ -228,12 +228,26 @@
                     <div class="bode-header-row">
                         <div class="bode-status-title">
                             <span class="pulse-dot-bode"></span>
-                            <span style="font-weight: 700; color: #38bdf8;">正弦波入力 &amp; ボード線図測定</span>
+                            <span style="font-weight: 700; color: #38bdf8;">正弦波入力 &amp; 周波数応答スタジオ</span>
                         </div>
                         <div class="bode-hud-badges">
                             <span id="bode-hud-gain" class="badge-hud">ゲイン: -- dB</span>
                             <span id="bode-hud-phase" class="badge-hud">位相: --°</span>
                         </div>
+                    </div>
+
+                    <!-- ループ種別切替サブタブ (開ループ vs 閉ループPID) -->
+                    <div class="transient-type-tabs bode-loop-tabs">
+                        <button id="btn-bode-open" class="btn-subtab active" title="システム単体に正弦波の外力/トルクを加える開ループ周波数応答">〰️ 外力加振 (開ループ)</button>
+                        <button id="btn-bode-closed" class="btn-subtab" title="目標位置/角度を正弦波で動かしてPID制御で追従させる閉ループ周波数応答">🤖 PID目標追従 (閉ループ)</button>
+                    </div>
+
+                    <!-- 3大現象 ワンクリック体験シナリオ -->
+                    <div class="bode-presets-row">
+                        <span style="font-size: 0.74rem; color: var(--text-secondary); font-weight: 700;">体験メニュー:</span>
+                        <button id="btn-bode-preset-low" class="btn btn-sm" style="border-color: rgba(16, 185, 129, 0.4); color: #34d399;" title="固有周波数より十分遅い入力で同位相追従を確認">🟢 ① 低周波 (同位相)</button>
+                        <button id="btn-bode-jump-wn" class="btn btn-sm" style="border-color: rgba(234, 179, 8, 0.5); color: #fbbf24;" title="固有角周波数(共振点 / 帯域限界)に周波数を合わせます">🔥 ② 共振点へ</button>
+                        <button id="btn-bode-preset-high" class="btn btn-sm" style="border-color: rgba(244, 63, 94, 0.4); color: #fda4af;" title="速すぎる入力で追いつけず逆位相・減衰になることを確認">🔴 ③ 高周波 (逆位相)</button>
                     </div>
 
                     <div class="bode-params-grid">
@@ -260,6 +274,12 @@
                         </div>
                     </div>
 
+                    <!-- リアルタイム物理現象解説バナー -->
+                    <div id="bode-insight-box" class="bode-insight-box region-resonance">
+                        <div id="bode-insight-title" class="bode-insight-title">🔥 共振点付近: エネルギー注入が最大！</div>
+                        <div id="bode-insight-desc" class="bode-insight-desc">ばねの復元力と慣性力が打ち消し合い、外力と速度が同位相になって振幅が大きく跳ね上がります。</div>
+                    </div>
+
                     <!-- アクションボタン群 -->
                     <div class="bode-actions-row">
                         <button id="btn-bode-sweep" class="btn btn-primary" title="低周波から高周波へ自動的に加振してボード線図を自動測定します">
@@ -268,16 +288,19 @@
                         <button id="btn-bode-record" class="btn" title="現在周波数での振幅・位相をボード線図にプロットします">
                             📍 現在値をプロット
                         </button>
-                        <button id="btn-bode-jump-wn" class="btn" title="固有角周波数(共振点)に周波数を合わせます">
-                            🎯 共振点へ
+                        <button id="btn-bode-toggle-phasor" class="btn btn-toggle active" title="時系列グラフ右側の回転ベクトル(フェーザ)図の表示切替">
+                            🧭 フェーザ図 ON
+                        </button>
+                        <button id="btn-bode-toggle-guide" class="btn btn-toggle active" title="ボード線図上の領域色分けと漸近線ガイドの表示切替">
+                            📖 ガイド ON
                         </button>
                         <button id="btn-bode-clear" class="btn btn-danger" title="ボード線図の測定プロットを消去します">
                             ↺ プロット消去
                         </button>
                     </div>
 
-                    <div class="control-hints" style="margin-top: 8px;">
-                        💡 <b>周波数スライダー</b>で周期変更 | <b>[▶ 自動スイープ]</b> で低〜高周波を自動加振してボード線図を1点ずつ自動生成！
+                    <div class="control-hints" style="margin-top: 4px;">
+                        💡 <b>ボード線図のグラフ上をクリック/ドラッグ</b>しても周波数を変更できます | <b>右側のフェーザ円</b>と波形のズレに注目！
                     </div>
                 </div>
             </div>

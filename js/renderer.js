@@ -441,6 +441,45 @@ export class PendulumRenderer {
             ctx.fillText(`安定化維持中... ${(stateStatus.holdingTime).toFixed(1)}s`, this.width / 2, barY - 3);
         }
 
+        // 正弦波モード時: 仕事率 (τ・ω) エネルギー注入インジケータ
+        if (stateStatus.isBodeMode) {
+            const power = physics.tau * physics.omega;
+            const bW = isSmallScreen ? 155 : 195;
+            const bH = 26;
+            const bX = this.width - bW - pad;
+            const bY = pad;
+
+            let bgCol = 'rgba(30, 41, 59, 0.85)';
+            let borderCol = '#475569';
+            let txtCol = '#cbd5e1';
+            let label = '・ 折返し / 静止';
+            if (power > 0.15) {
+                bgCol = 'rgba(16, 185, 129, 0.22)';
+                borderCol = '#10b981';
+                txtCol = '#34d399';
+                label = '⚡ エネルギー注入中 (τとω同方向)';
+            } else if (power < -0.15) {
+                bgCol = 'rgba(244, 63, 94, 0.22)';
+                borderCol = '#f43f5e';
+                txtCol = '#fda4af';
+                label = '🛑 逆相ブレーキ中 (τとω逆方向)';
+            }
+
+            ctx.fillStyle = bgCol;
+            ctx.strokeStyle = borderCol;
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.roundRect(bX, bY, bW, bH, 6);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = txtCol;
+            ctx.font = isSmallScreen ? 'bold 9px sans-serif' : 'bold 10px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, bX + bW / 2, bY + bH / 2);
+        }
+
         ctx.restore();
     }
 }

@@ -1,5 +1,6 @@
 /**
  * bode-renderer.js - ボード線図（ゲイン線図＆位相線図）のCanvas描画
+ * 学習ガイド（領域色分け・折れ線漸近線・共振点/帯域幅マーカー）＆クリック周波数選択対応
  */
 
 import { BodeAnalyzer } from './bode.js';
@@ -13,6 +14,9 @@ export class BodeRenderer {
         this.ctx = canvas.getContext('2d');
         this.dpr = window.devicePixelRatio || 1;
 
+        // 学習ガイド（領域色分け・漸近線・折点マーカー）表示フラグ
+        this.showGuide = true;
+
         // 周波数レンジ（対数）
         this.minOmega = 0.2;
         this.maxOmega = 30.0;
@@ -25,6 +29,13 @@ export class BodeRenderer {
         this.minPhaseDeg = -195.0;
         this.maxPhaseDeg = 15.0;
 
+        // レイアウトパディング（座標逆変換でも共有）
+        this.padLeft = 44;
+        this.padRight = 18;
+        this.padTop = 18;
+        this.padBottom = 22;
+        this.gap = 18;
+
         this.colors = {
             bg: '#0f172a',
             grid: '#1e293b',
@@ -32,7 +43,8 @@ export class BodeRenderer {
             axis: '#334155',
             zeroLine: 'rgba(148, 163, 184, 0.4)',
             text: '#94a3b8',
-            theory: 'rgba(56, 189, 248, 0.45)',  // 理論曲線（薄いシアン破線）
+            theory: 'rgba(56, 189, 248, 0.65)',  // 理論曲線
+            asymptote: 'rgba(251, 146, 60, 0.55)', // 折れ線漸近線（オレンジ破線）
             measured: '#10b981',                 // 実測プロット（エメラルド実線）
             point: '#34d399',
             pointGlow: 'rgba(16, 185, 129, 0.5)',
@@ -79,6 +91,17 @@ export class BodeRenderer {
     }
 
     /**
+     * Xピクセル座標 -> 周波数 ω (対数逆変換: ボード線図クリック操作用)
+     */
+    xToOmega(canvasX) {
+        const plotW = Math.max(10, (this.width || 320) - this.padLeft - this.padRight);
+        const norm = Math.max(0, Math.min(1, (canvasX - this.padLeft) / plotW));
+        const logMin = Math.log10(this.minOmega);
+        const logMax = Math.log10(this.maxOmega);
+        return Math.pow(10, logMin + norm * (logMax - logMin));
+    }
+
+    /**
      * ゲイン [dB] -> Yピクセル座標
      */
     gainToY(gainDb, plotTop, plotHeight) {
@@ -99,8 +122,9 @@ export class BodeRenderer {
      * @param {BodeAnalyzer} analyzer 
      * @param {string} systemType 'msd' | 'pendulum'
      * @param {object} physics 
+     * @param {object|null} pid
      */
-    draw(analyzer, systemType, physics) {
+    draw(analyzer, systemType, physics, pid = null) {
         if (!this.width || this.width < 20 || !this.height || this.height < 20) {
             this.resize();
         }
@@ -112,11 +136,11 @@ export class BodeRenderer {
         ctx.fillStyle = this.colors.bg;
         ctx.fillRect(0, 0, w, h);
 
-        const padLeft = 44;
-        const padRight = 18;
-        const padTop = 18;
-        const padBottom = 22;
-        const gap = 18; // ゲイン線図と位相線図の間の隙間
+        const padLeft = this.padLeft;
+        const padRight = this.padRight;
+        const padTop = this.padTop;
+        const padBottom = this.padBottom;
+        const gap = this.gap;
 
         const totalPlotH = h - padTop - padBottom - gap;
         const gainPlotH = Math.floor(totalPlotH * 0.52);
@@ -126,23 +150,197 @@ export class BodeRenderer {
         const gainPlotTop = padTop;
         const phasePlotTop = padTop + gainPlotH + gap;
 
+        const loopType = analyzer.loopType || 'open';
+
+        // 0. 学習ガイド（3領域背景色分け）
+        if (this.showGuide) {
+            this.drawRegionBackgrounds(analyzer, systemType, physics, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH);
+        }
+
         // 1. グリッドと目盛り
-        this.drawGridsAndAxes(plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, padLeft, padRight);
+        this.drawGridsAndAxes(plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, padLeft, padRight, loopType);
 
-        // 2. 理論曲線の描画（高解像度サンプル）
-        this.drawTheoreticalCurves(systemType, physics, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH);
+        // 2. 学習ガイド（漸近線・共振点/帯域幅マーカー）
+        if (this.showGuide) {
+            this.drawLearningOverlays(analyzer, systemType, physics, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH);
+        }
 
-        // 3. 実測プロット点の描画
+        // 3. 理論曲線の描画（高解像度サンプル）
+        this.drawTheoreticalCurves(systemType, physics, loopType, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH);
+
+        // 4. 実測プロット点の描画
         this.drawMeasuredPlots(analyzer.measurements, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH);
 
-        // 4. 現在入力中の周波数カーソル＆リアルタイム点
+        // 5. 現在入力中の周波数カーソル＆リアルタイム点
         this.drawCurrentCursor(analyzer, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH);
 
-        // 5. 凡例＆HUD
+        // 6. 凡例＆HUD
         this.drawLegend(analyzer, padLeft, gainPlotTop, phasePlotTop);
     }
 
-    drawGridsAndAxes(plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, padLeft, padRight) {
+    drawRegionBackgrounds(analyzer, systemType, physics, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH) {
+        const ctx = this.ctx;
+        const loopType = analyzer.loopType || 'open';
+        const chars = BodeAnalyzer.computeSystemCharacteristics(systemType, physics, loopType, pid);
+
+        ctx.save();
+        if (loopType === 'open') {
+            const wLowMax = Math.max(this.minOmega, Math.min(this.maxOmega, chars.wn * 0.6));
+            const wHighMin = Math.max(this.minOmega, Math.min(this.maxOmega, chars.wn * 1.45));
+
+            const xMin = padLeft;
+            const xLowEnd = this.omegaToX(wLowMax, padLeft, plotW);
+            const xHighStart = this.omegaToX(wHighMin, padLeft, plotW);
+            const xMax = padLeft + plotW;
+
+            // 低周波域（緑ティント）
+            if (xLowEnd > xMin) {
+                ctx.fillStyle = 'rgba(16, 185, 129, 0.06)';
+                ctx.fillRect(xMin, gainPlotTop, xLowEnd - xMin, gainPlotH);
+                ctx.fillRect(xMin, phasePlotTop, xLowEnd - xMin, phasePlotH);
+            }
+            // 共振域（アンバーティント）
+            if (xHighStart > xLowEnd) {
+                ctx.fillStyle = 'rgba(234, 179, 8, 0.07)';
+                ctx.fillRect(xLowEnd, gainPlotTop, xHighStart - xLowEnd, gainPlotH);
+                ctx.fillRect(xLowEnd, phasePlotTop, xHighStart - xLowEnd, phasePlotH);
+            }
+            // 高周波域（レッドティント）
+            if (xMax > xHighStart) {
+                ctx.fillStyle = 'rgba(244, 63, 94, 0.06)';
+                ctx.fillRect(xHighStart, gainPlotTop, xMax - xHighStart, gainPlotH);
+                ctx.fillRect(xHighStart, phasePlotTop, xMax - xHighStart, phasePlotH);
+            }
+        } else {
+            // 閉ループ時は追従帯域内 (0 〜 ωB) を薄い緑で示す
+            if (chars.bandwidthOmega) {
+                const xBw = this.omegaToX(Math.min(this.maxOmega, chars.bandwidthOmega), padLeft, plotW);
+                if (xBw > padLeft) {
+                    ctx.fillStyle = 'rgba(16, 185, 129, 0.07)';
+                    ctx.fillRect(padLeft, gainPlotTop, xBw - padLeft, gainPlotH);
+                    ctx.fillRect(padLeft, phasePlotTop, xBw - padLeft, phasePlotH);
+                }
+            }
+        }
+        ctx.restore();
+    }
+
+    drawLearningOverlays(analyzer, systemType, physics, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH) {
+        const ctx = this.ctx;
+        const loopType = analyzer.loopType || 'open';
+        const chars = BodeAnalyzer.computeSystemCharacteristics(systemType, physics, loopType, pid);
+
+        ctx.save();
+        if (loopType === 'open') {
+            // 1. 折れ線漸近線（DCゲイン一定 → ωnから -40dB/dec で下降）
+            const wn = Math.max(this.minOmega, Math.min(this.maxOmega, chars.wn));
+            const xCorner = this.omegaToX(wn, padLeft, plotW);
+            const yDc = this.gainToY(chars.dcGainDb, gainPlotTop, gainPlotH);
+
+            ctx.strokeStyle = this.colors.asymptote;
+            ctx.lineWidth = 1.4;
+            ctx.setLineDash([5, 4]);
+            ctx.beginPath();
+            ctx.moveTo(padLeft, yDc);
+            ctx.lineTo(xCorner, yDc);
+
+            // ω_max での漸近値: dcGainDb - 40 * log10(maxOmega / wn)
+            const highGainDb = chars.dcGainDb - 40.0 * Math.log10(Math.max(1.0, this.maxOmega / wn));
+            // グラフ下端との交点をクリッピングして綺麗に描く
+            const xEnd = padLeft + plotW;
+            const yEnd = this.gainToY(highGainDb, gainPlotTop, gainPlotH);
+            ctx.lineTo(xEnd, yEnd);
+            ctx.stroke();
+
+            // 漸近線ラベル (-40 dB/dec)
+            if (xCorner < padLeft + plotW - 60) {
+                ctx.fillStyle = 'rgba(251, 146, 60, 0.85)';
+                ctx.font = '9px monospace';
+                ctx.textAlign = 'left';
+                const labelY = Math.min(gainPlotTop + gainPlotH - 12, Math.max(gainPlotTop + 18, (yDc + yEnd) * 0.5));
+                ctx.fillText('-40dB/dec', Math.min(padLeft + plotW - 58, xCorner + 12), labelY);
+            }
+
+            // 2. 固有角周波数 ωn の縦ガイドライン & -90°交点
+            if (chars.wn >= this.minOmega && chars.wn <= this.maxOmega) {
+                const xWn = this.omegaToX(chars.wn, padLeft, plotW);
+                ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
+                ctx.lineWidth = 1.1;
+                ctx.setLineDash([2, 3]);
+                ctx.beginPath();
+                ctx.moveTo(xWn, gainPlotTop);
+                ctx.lineTo(xWn, gainPlotTop + gainPlotH);
+                ctx.moveTo(xWn, phasePlotTop);
+                ctx.lineTo(xWn, phasePlotTop + phasePlotH);
+                ctx.stroke();
+
+                // 位相 -90° 交点マーカー
+                const yMinus90 = this.phaseToY(-90, phasePlotTop, phasePlotH);
+                ctx.setLineDash([]);
+                ctx.fillStyle = '#38bdf8';
+                ctx.beginPath();
+                ctx.arc(xWn, yMinus90, 3.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.font = '9px monospace';
+                ctx.textAlign = xWn > padLeft + plotW * 0.72 ? 'right' : 'left';
+                const txOffset = xWn > padLeft + plotW * 0.72 ? -5 : 5;
+                ctx.fillText(`ωn=${chars.wn.toFixed(2)} (-90°)`, xWn + txOffset, yMinus90 - 11);
+            }
+
+            // 領域ラベル（下部空きスペース付近）
+            ctx.font = '9px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillStyle = 'rgba(16, 185, 129, 0.75)';
+            ctx.fillText('同位相・追従', padLeft + 6, phasePlotTop + phasePlotH - 13);
+
+            ctx.textAlign = 'right';
+            ctx.fillStyle = 'rgba(244, 63, 94, 0.75)';
+            ctx.fillText('逆位相・減衰', padLeft + plotW - 6, phasePlotTop + 4);
+        } else {
+            // 閉ループ学習オーバーレイ: -3dBライン & 帯域幅 ωB
+            const yMinus3 = this.gainToY(chars.dcGainDb - 3.0, gainPlotTop, gainPlotH);
+            ctx.strokeStyle = 'rgba(251, 146, 60, 0.55)';
+            ctx.lineWidth = 1.1;
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath();
+            ctx.moveTo(padLeft, yMinus3);
+            ctx.lineTo(padLeft + plotW, yMinus3);
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(251, 146, 60, 0.85)';
+            ctx.font = '9px monospace';
+            ctx.textAlign = 'right';
+            ctx.fillText('-3dB基準', padLeft + plotW - 4, yMinus3 + 3);
+
+            if (chars.bandwidthOmega && chars.bandwidthOmega >= this.minOmega && chars.bandwidthOmega <= this.maxOmega) {
+                const xBw = this.omegaToX(chars.bandwidthOmega, padLeft, plotW);
+                ctx.strokeStyle = 'rgba(16, 185, 129, 0.65)';
+                ctx.lineWidth = 1.2;
+                ctx.setLineDash([3, 3]);
+                ctx.beginPath();
+                ctx.moveTo(xBw, gainPlotTop);
+                ctx.lineTo(xBw, gainPlotTop + gainPlotH);
+                ctx.moveTo(xBw, phasePlotTop);
+                ctx.lineTo(xBw, phasePlotTop + phasePlotH);
+                ctx.stroke();
+
+                ctx.setLineDash([]);
+                ctx.fillStyle = '#10b981';
+                ctx.beginPath();
+                ctx.arc(xBw, yMinus3, 4, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.font = '9px monospace';
+                ctx.textAlign = xBw > padLeft + plotW * 0.7 ? 'right' : 'left';
+                const offset = xBw > padLeft + plotW * 0.7 ? -6 : 6;
+                ctx.fillText(`帯域幅 ωB=${chars.bandwidthOmega.toFixed(2)}`, xBw + offset, gainPlotTop + 18);
+            }
+        }
+        ctx.restore();
+    }
+
+    drawGridsAndAxes(plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, padLeft, padRight, loopType = 'open') {
         const ctx = this.ctx;
         const w = this.width;
 
@@ -176,7 +374,7 @@ export class BodeRenderer {
 
         gainTicks.forEach(gVal => {
             const y = this.gainToY(gVal, gainPlotTop, gainPlotH);
-            ctx.strokeStyle = gVal === 0 ? this.colors.zeroLine : this.colors.grid;
+            ctx.strokeStyle = gVal === 0 ? (loopType === 'closed' ? 'rgba(16, 185, 129, 0.6)' : this.colors.zeroLine) : this.colors.grid;
             ctx.lineWidth = gVal === 0 ? 1.5 : 1;
             ctx.beginPath();
             ctx.moveTo(padLeft, y);
@@ -214,7 +412,7 @@ export class BodeRenderer {
         ctx.fillText('ω [rad/s]', w - padRight, phasePlotTop + phasePlotH + 5);
     }
 
-    drawTheoreticalCurves(systemType, physics, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH) {
+    drawTheoreticalCurves(systemType, physics, loopType, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH) {
         // 対数等間隔に120点サンプリングして理論曲線を生成
         const N = 120;
         const omegaRange = [];
@@ -225,13 +423,13 @@ export class BodeRenderer {
             omegaRange.push(w);
         }
 
-        const theoretical = BodeAnalyzer.computeTheoreticalBode(systemType, physics, omegaRange);
+        const theoretical = BodeAnalyzer.computeTheoreticalBode(systemType, physics, omegaRange, loopType, pid);
         if (theoretical.length < 2) return;
 
         const ctx = this.ctx;
         ctx.save();
         ctx.strokeStyle = this.colors.theory;
-        ctx.lineWidth = 1.8;
+        ctx.lineWidth = 1.9;
         ctx.setLineDash([4, 3]);
 
         // 理論ゲイン線図
@@ -321,7 +519,7 @@ export class BodeRenderer {
 
         // 縦のカーソル破線
         ctx.strokeStyle = this.colors.cursor;
-        ctx.lineWidth = 1.2;
+        ctx.lineWidth = 1.3;
         ctx.setLineDash([3, 3]);
         ctx.beginPath();
         ctx.moveTo(x, gainPlotTop);
@@ -369,25 +567,30 @@ export class BodeRenderer {
         ctx.fillText('ゲイン線図 [dB]', padLeft + 6, gainPlotTop + 5);
 
         // 凡例
-        ctx.fillStyle = 'rgba(56, 189, 248, 0.8)';
-        ctx.fillText('-- 理論曲線', padLeft + 110, gainPlotTop + 5);
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.85)';
+        ctx.fillText('-- 理論', padLeft + 94, gainPlotTop + 5);
 
         ctx.fillStyle = '#34d399';
-        ctx.fillText('―● 実測プロット', padLeft + 185, gainPlotTop + 5);
+        ctx.fillText('―● 実測', padLeft + 140, gainPlotTop + 5);
 
         // 位相線図タイトル
         ctx.fillStyle = '#f8fafc';
         ctx.fillText('位相線図 [deg]', padLeft + 6, phasePlotTop + 5);
 
-        // スイープ状態のHUDバッジ
+        // 操作ヒント（スイープ中でなければ右上に控えめ表示）
         if (analyzer.isSweeping) {
             const isSettling = analyzer.sweepState === 'settling';
             ctx.fillStyle = isSettling ? '#eab308' : '#10b981';
             ctx.font = 'bold 10px monospace';
             ctx.textAlign = 'right';
             const progress = `[${analyzer.sweepIndex + 1}/${analyzer.sweepFrequencies.length}]`;
-            const statusText = isSettling ? `⏳ 過渡待ち中... ${progress}` : `📡 測定積算中... ${progress}`;
-            ctx.fillText(statusText, this.width - 24, gainPlotTop + 5);
+            const statusText = isSettling ? `⏳ 過渡待ち... ${progress}` : `📡 測定積算... ${progress}`;
+            ctx.fillText(statusText, this.width - 22, gainPlotTop + 5);
+        } else {
+            ctx.fillStyle = 'rgba(148, 163, 184, 0.65)';
+            ctx.font = '9px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText('👆 グラフ押下で周波数変更', this.width - 22, gainPlotTop + 5);
         }
     }
 }

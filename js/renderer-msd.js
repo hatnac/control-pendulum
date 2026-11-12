@@ -132,8 +132,11 @@ export class MassSpringDamperRenderer {
         // 7. マスブロック（車輪付き）
         this.drawMassBlock(m, physics, stateStatus.isDragging);
 
-        // 8. 入力外力 F のベクトル矢印
+        // 8. 入力外力 F のベクトル矢印 (＆正弦波時は速度ベクトル v も表示)
         this.drawForceVector(m, physics);
+        if (stateStatus.isBodeMode) {
+            this.drawVelocityVector(m, physics);
+        }
 
         // 9. HUD表示
         this.drawHUD(m, physics, stateStatus);
@@ -463,6 +466,53 @@ export class MassSpringDamperRenderer {
         ctx.restore();
     }
 
+    /**
+     * 速度ベクトル v の描画（正弦波モード時、外力との向き比較用）
+     */
+    drawVelocityVector(m, physics) {
+        const ctx = this.ctx;
+        const v = physics.v;
+        if (Math.abs(v) < 0.03) return;
+
+        const isRight = v > 0;
+        const maxArrowLen = m.massWidth * 1.1;
+        const arrowLen = Math.min(maxArrowLen, (Math.abs(v) / 2.5) * maxArrowLen);
+
+        const startX = m.massCenterX;
+        const endX = isRight ? (startX + arrowLen) : (startX - arrowLen);
+        const y = m.massTopY - 14;
+
+        ctx.save();
+        ctx.strokeStyle = '#c084fc';
+        ctx.fillStyle = '#c084fc';
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+
+        ctx.beginPath();
+        ctx.moveTo(startX, y);
+        ctx.lineTo(endX, y);
+        ctx.stroke();
+
+        const headSize = 6;
+        ctx.beginPath();
+        if (isRight) {
+            ctx.moveTo(endX + headSize, y);
+            ctx.lineTo(endX, y - headSize * 0.6);
+            ctx.lineTo(endX, y + headSize * 0.6);
+        } else {
+            ctx.moveTo(endX - headSize, y);
+            ctx.lineTo(endX, y - headSize * 0.6);
+            ctx.lineTo(endX, y + headSize * 0.6);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.font = 'bold 9px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`速度 v=${v.toFixed(2)}m/s`, m.massCenterX, y - 9);
+        ctx.restore();
+    }
+
     drawHUD(m, physics, stateStatus) {
         const ctx = this.ctx;
         ctx.save();
@@ -542,6 +592,45 @@ export class MassSpringDamperRenderer {
             ctx.textAlign = 'center';
             ctx.textBaseline = 'bottom';
             ctx.fillText(`目標位置キープ... ${(stateStatus.holdingTime).toFixed(1)}s`, this.width / 2, barY - 3);
+        }
+
+        // 正弦波モード時: 仕事率 (F・v) エネルギー注入インジケータ
+        if (stateStatus.isBodeMode) {
+            const power = physics.f * physics.v;
+            const bW = isSmallScreen ? 155 : 195;
+            const bH = 26;
+            const bX = this.width - bW - pad;
+            const bY = pad;
+
+            let bgCol = 'rgba(30, 41, 59, 0.85)';
+            let borderCol = '#475569';
+            let txtCol = '#cbd5e1';
+            let label = '・ 折返し / 静止';
+            if (power > 0.15) {
+                bgCol = 'rgba(16, 185, 129, 0.22)';
+                borderCol = '#10b981';
+                txtCol = '#34d399';
+                label = '⚡ エネルギー注入中 (Fとv同方向)';
+            } else if (power < -0.15) {
+                bgCol = 'rgba(244, 63, 94, 0.22)';
+                borderCol = '#f43f5e';
+                txtCol = '#fda4af';
+                label = '🛑 逆相ブレーキ中 (Fとv逆方向)';
+            }
+
+            ctx.fillStyle = bgCol;
+            ctx.strokeStyle = borderCol;
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.roundRect(bX, bY, bW, bH, 6);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = txtCol;
+            ctx.font = isSmallScreen ? 'bold 9px sans-serif' : 'bold 10px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, bX + bW / 2, bY + bH / 2);
         }
 
         ctx.restore();

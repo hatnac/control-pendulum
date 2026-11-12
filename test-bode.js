@@ -1,6 +1,7 @@
 // test-bode.js
 import { MassSpringDamperPhysics } from './js/physics-msd.js';
 import { PendulumPhysics } from './js/physics.js';
+import { PIDController } from './js/pid.js';
 import { BodeAnalyzer } from './js/bode.js';
 
 console.log('=== Running Frequency Response & Bode Plot Verification Tests ===\n');
@@ -92,6 +93,74 @@ function assert(condition, message) {
 
     const bode = BodeAnalyzer.computeTheoreticalBode('pendulum', pend, [wn]);
     assert(Math.abs(bode[0].phaseDeg - (-90.0)) < 0.1, `Pendulum resonance phase is -90 deg`);
+}
+
+// 4. 閉ループPID周波数応答の理論計算・帯域幅・シミュレーション追従テスト
+{
+    const msd = new MassSpringDamperPhysics();
+    msd.m = 1.0;
+    msd.k = 12.0;
+    msd.d = 1.2;
+    msd.fMax = 35.0;
+    msd.reset(0, 0);
+
+    const pid = new PIDController();
+    pid.angleMode = false;
+    pid.kp = 30.0;
+    pid.ki = 12.0;
+    pid.kd = 8.0;
+
+    // 閉ループ理論DCゲインは Ki>0 なので ω→0 で 0 dB (=1.0) に収束し、高周波でロールオフする
+    const closedBode = BodeAnalyzer.computeTheoreticalBode('msd', msd, [0.05, 1.0, 30.0], 'closed', pid);
+    assert(Math.abs(closedBode[0].gainDb) < 0.2, `Closed-loop very-low-freq (0.05 rad/s) gain is near 0 dB (${closedBode[0].gainDb.toFixed(2)} dB)`);
+    assert(closedBode[2].gainDb < -10.0, `Closed-loop high-freq (30 rad/s) gain rolls off (${closedBode[2].gainDb.toFixed(2)} dB)`);
+
+    // 特性と帯域幅 ωB の算出テスト
+    const chars = BodeAnalyzer.computeSystemCharacteristics('msd', msd, 'closed', pid);
+    assert(chars.bandwidthOmega !== null && chars.bandwidthOmega > 2.0, `Closed-loop bandwidth ωB detected: ${chars.bandwidthOmega ? chars.bandwidthOmega.toFixed(2) : null} rad/s`);
+
+    // 正弦波 (ω=1.5 rad/s) に対する閉ループPID追従シミュレーションが理論値と一致するか検証
+    const testW = 1.5;
+    const expectedClosedPt = BodeAnalyzer.evaluatePoint(testW, 'msd', msd, 'closed', pid);
+    const analyzer = new BodeAnalyzer();
+    analyzer.setLoopType('closed');
+    analyzer.setOmega(testW);
+    analyzer.setAmplitude(0.4); // 目標振幅 0.40m
+
+    const dt = 0.005;
+    for (let t = 0; t <= 12.0; t += dt) {
+        const targetX = analyzer.updateInput(dt);
+        const force = pid.compute(targetX, msd.x, msd.v, dt, msd.fMax);
+        msd.update(dt, force);
+        analyzer.processSample(targetX, msd.x, dt);
+    }
+
+    assert(Math.abs(analyzer.currentGainDb - expectedClosedPt.gainDb) < 0.5, `Closed-loop measured gain (${analyzer.currentGainDb.toFixed(2)} dB) matches theory (${expectedClosedPt.gainDb.toFixed(2)} dB)`);
+    assert(Math.abs(analyzer.currentPhaseDeg - expectedClosedPt.phaseDeg) < 4.0, `Closed-loop measured phase (${analyzer.currentPhaseDeg.toFixed(1)}°) matches theory (${expectedClosedPt.phaseDeg.toFixed(1)}°)`);
+}
+
+// 5. 学習解説インサイトの領域判定テスト (低周波 / 共振点 / 高周波)
+{
+    const msd = new MassSpringDamperPhysics();
+    msd.m = 1.0;
+    msd.k = 16.0;
+    msd.d = 1.6; // wn = 4.0 rad/s
+
+    const analyzer = new BodeAnalyzer();
+    analyzer.setLoopType('open');
+    analyzer.setAmplitude(4.0);
+
+    analyzer.setOmega(1.0); // 0.25 * wn -> low
+    const lowInsight = analyzer.getLearningInsight('msd', msd);
+    assert(lowInsight.region === 'low', `Insight region at ω=1.0 is 'low' (actual=${lowInsight.region})`);
+
+    analyzer.setOmega(4.0); // 1.0 * wn -> resonance
+    const resInsight = analyzer.getLearningInsight('msd', msd);
+    assert(resInsight.region === 'resonance', `Insight region at ω=4.0 is 'resonance' (actual=${resInsight.region})`);
+
+    analyzer.setOmega(12.0); // 3.0 * wn -> high
+    const highInsight = analyzer.getLearningInsight('msd', msd);
+    assert(highInsight.region === 'high', `Insight region at ω=12.0 is 'high' (actual=${highInsight.region})`);
 }
 
 console.log(`\n=== Verification Finished: ${failed === 0 ? 'ALL TESTS PASSED' : failed + ' TESTS FAILED'} ===`);

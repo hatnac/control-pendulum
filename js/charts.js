@@ -21,6 +21,7 @@ export class ControlCharts {
         this.systemMode = 'pendulum';
         this.isBodeMode = false;
         this.isTransientMode = false;
+        this.showPhasor = true; // 正弦波モード時のリアルタイム・フェーザ図表示
 
         // データ履歴バッファ
         this.maxHistory = 400; // 約6〜8秒分のデータ
@@ -204,13 +205,26 @@ export class ControlCharts {
         const isPendulum = this.systemMode === 'pendulum';
         const isBode = this.isBodeMode && bodeAnalyzer !== null;
         const isTransient = this.isTransientMode && transientManager !== null;
+        const isClosedBode = isBode && bodeAnalyzer.loopType === 'closed';
+        const showPhasor = isBode && this.showPhasor;
 
         const padLeft = isPendulum ? 42 : 46;
-        const padRight = 15;
+        const padRight = showPhasor ? 10 : 15;
         const padTop = 22;
         const padBottom = 22;
-        const plotW = w - padLeft - padRight;
+        const phasorAreaW = showPhasor ? Math.min(138, Math.max(92, Math.floor(w * 0.28))) : 0;
+        const plotW = Math.max(80, w - padLeft - padRight - phasorAreaW);
         const plotH = h - padTop - padBottom;
+
+        // 値 -> Y座標変換ヘルパー
+        const valToY = (val) => {
+            if (isPendulum) {
+                return padTop + plotH * (1.0 - (val + 180) / 360);
+            } else {
+                const norm = (val - (-1.0)) / 2.0;
+                return padTop + plotH * (1.0 - Math.max(0, Math.min(1, norm)));
+            }
+        };
 
         // グリッド線と目盛りの設定
         ctx.strokeStyle = this.colors.grid;
@@ -229,7 +243,7 @@ export class ControlCharts {
                 const y = padTop + plotH * (1.0 - (deg + 180) / 360);
                 ctx.beginPath();
                 ctx.moveTo(padLeft, y);
-                ctx.lineTo(w - padRight, y);
+                ctx.lineTo(padLeft + plotW, y);
                 ctx.stroke();
                 ctx.fillText(`${deg}°`, padLeft - 6, y);
             });
@@ -244,7 +258,7 @@ export class ControlCharts {
                 const y = padTop + plotH * (1.0 - norm);
                 ctx.beginPath();
                 ctx.moveTo(padLeft, y);
-                ctx.lineTo(w - padRight, y);
+                ctx.lineTo(padLeft + plotW, y);
                 ctx.stroke();
                 const sign = tVal > 0 ? '+' : '';
                 ctx.fillText(`${sign}${tVal.toFixed(1)}m`, padLeft - 6, y);
@@ -256,7 +270,7 @@ export class ControlCharts {
         ctx.strokeStyle = this.colors.axis;
         ctx.beginPath();
         ctx.moveTo(padLeft, zeroY);
-        ctx.lineTo(w - padRight, zeroY);
+        ctx.lineTo(padLeft + plotW, zeroY);
         ctx.stroke();
 
         // 凡例表示
@@ -267,11 +281,12 @@ export class ControlCharts {
             ctx.fillText(isPendulum ? '― 出力 θ(t)' : '― 出力 x(t)', padLeft + 6, padTop - 8);
 
             ctx.fillStyle = this.colors.control;
-            ctx.fillText('--- 正弦波入力 u(t)', padLeft + 80, padTop - 8);
+            ctx.fillText(isClosedBode ? '--- 目標正弦波 r(t)' : '--- 正弦波入力 u(t)', padLeft + 80, padTop - 8);
 
-            if (bodeAnalyzer.currentAmpOut > 0.001) {
+            if (bodeAnalyzer.currentAmpOut > 0.001 && !showPhasor) {
+                const ampRatio = Math.pow(10, bodeAnalyzer.currentGainDb / 20.0);
                 ctx.fillStyle = '#eab308';
-                ctx.fillText(`|G|=${bodeAnalyzer.currentGainDb.toFixed(1)}dB  φ=${bodeAnalyzer.currentPhaseDeg.toFixed(0)}°`, padLeft + 185, padTop - 8);
+                ctx.fillText(`×${ampRatio.toFixed(2)} (${bodeAnalyzer.currentGainDb.toFixed(1)}dB) φ=${bodeAnalyzer.currentPhaseDeg.toFixed(0)}°`, padLeft + 195, padTop - 8);
             }
         } else if (isTransient) {
             // 過渡応答モードの凡例
@@ -297,88 +312,125 @@ export class ControlCharts {
             ctx.fillText(isPendulum ? '― トルク τ' : '― 入力外力 F', padLeft + (isPendulum ? 160 : 166), padTop - 8);
         }
 
-        if (this.history.length < 2) return;
+        // X座標計算（正弦波モード時は最新点が右端に揃い左へスクロール）
+        const idxToX = (i) => {
+            if (isBode) {
+                return padLeft + plotW - ((this.history.length - 1 - i) / (this.maxHistory - 1)) * plotW;
+            }
+            return padLeft + (i / (this.maxHistory - 1)) * plotW;
+        };
 
-        // 1. 目標値の破線プロット (通常モードおよび過渡ステップ時)
-        if (!isBode && (!isTransient || transientManager.responseType !== 'impulse')) {
+        // 静的基準線 (開ループ正弦波時の DC変位 A_in / K)
+        let staticYTop = null;
+        let staticYBottom = null;
+        if (isBode && !isClosedBode) {
+            const chars = bodeAnalyzer.constructor.computeSystemCharacteristics(this.systemMode, physics, 'open', null);
+            const dcAmp = bodeAnalyzer.amplitude * chars.dcGain;
+            const dcVal = isPendulum ? (dcAmp * 180 / Math.PI) : dcAmp;
+            staticYTop = valToY(dcVal);
+            staticYBottom = valToY(-dcVal);
+
             ctx.save();
-            ctx.strokeStyle = this.colors.target;
-            ctx.lineWidth = 1.5;
-            ctx.setLineDash([4, 4]);
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.32)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([2, 3]);
+            ctx.beginPath();
+            ctx.moveTo(padLeft, staticYTop);
+            ctx.lineTo(padLeft + plotW, staticYTop);
+            ctx.moveTo(padLeft, staticYBottom);
+            ctx.lineTo(padLeft + plotW, staticYBottom);
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(148, 163, 184, 0.65)';
+            ctx.font = '9px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText(`静的基準 ±${isPendulum ? dcVal.toFixed(1) + '°' : dcVal.toFixed(2) + 'm'}`, padLeft + 4, staticYTop - 4);
+            ctx.restore();
+        }
+
+        if (this.history.length >= 2) {
+            // 1. 目標値の破線プロット (通常モードおよび過渡ステップ時)
+            if (!isBode && (!isTransient || transientManager.responseType !== 'impulse')) {
+                ctx.save();
+                ctx.strokeStyle = this.colors.target;
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                for (let i = 0; i < this.history.length; i++) {
+                    const p = this.history[i];
+                    const x = idxToX(i);
+                    const y = valToY(p.target);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // 2. 制御入力（または閉ループ目標正弦波）プロット
+            ctx.save();
+            ctx.strokeStyle = this.colors.control;
+            ctx.lineWidth = isBode ? 1.8 : 1.2;
+            if (isBode) ctx.setLineDash([4, 3]);
             ctx.beginPath();
             for (let i = 0; i < this.history.length; i++) {
                 const p = this.history[i];
-                const x = padLeft + (i / (this.maxHistory - 1)) * plotW;
+                const x = idxToX(i);
                 let y;
-                if (isPendulum) {
-                    y = padTop + plotH * (1.0 - (p.target + 180) / 360);
+                if (isClosedBode) {
+                    // 閉ループ時は目標正弦波を出力と同じ物理Yスケールで描画
+                    y = valToY(p.target);
                 } else {
-                    const norm = (p.target - (-1.0)) / 2.0;
-                    y = padTop + plotH * (1.0 - Math.max(0, Math.min(1, norm)));
+                    const inMax = Math.max(0.1, isBode ? bodeAnalyzer.amplitude : (p.inputMax || 10.0));
+                    const inNorm = Math.max(-1.2, Math.min(1.2, p.input / inMax));
+                    y = zeroY - inNorm * (plotH * 0.30);
                 }
                 if (i === 0) ctx.moveTo(x, y);
                 else ctx.lineTo(x, y);
             }
             ctx.stroke();
             ctx.restore();
-        }
 
-        // 2. 制御入力（トルク τ / 外力 F）プロット（ゼロ軸中心にスケーリング）
-        ctx.save();
-        ctx.strokeStyle = this.colors.control;
-        ctx.lineWidth = isBode ? 1.6 : 1.2;
-        if (isBode) ctx.setLineDash([4, 3]);
-        ctx.beginPath();
-        for (let i = 0; i < this.history.length; i++) {
-            const p = this.history[i];
-            const x = padLeft + (i / (this.maxHistory - 1)) * plotW;
-            const inMax = Math.max(0.1, p.inputMax || 10.0);
-            const inNorm = p.input / inMax;
-            const y = zeroY - inNorm * (plotH * 0.35);
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-        ctx.restore();
-
-        // 3. 状態量（角度 θ / 変位 x）プロット
-        ctx.save();
-        ctx.strokeStyle = this.colors.signal;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        let prevVal = null;
-        for (let i = 0; i < this.history.length; i++) {
-            const p = this.history[i];
-            const x = padLeft + (i / (this.maxHistory - 1)) * plotW;
-            let y;
-            if (isPendulum) {
-                y = padTop + plotH * (1.0 - (p.val + 180) / 360);
-                if (prevVal !== null && Math.abs(p.val - prevVal) > 180) {
-                    ctx.moveTo(x, y);
-                } else if (i === 0) {
-                    ctx.moveTo(x, y);
+            // 3. 状態量（角度 θ / 変位 x）プロット
+            ctx.save();
+            ctx.strokeStyle = this.colors.signal;
+            ctx.lineWidth = 2.1;
+            ctx.beginPath();
+            let prevVal = null;
+            for (let i = 0; i < this.history.length; i++) {
+                const p = this.history[i];
+                const x = idxToX(i);
+                const y = valToY(p.val);
+                if (isPendulum) {
+                    if (prevVal !== null && Math.abs(p.val - prevVal) > 180) {
+                        ctx.moveTo(x, y);
+                    } else if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                    prevVal = p.val;
                 } else {
-                    ctx.lineTo(x, y);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
                 }
-                prevVal = p.val;
-            } else {
-                const norm = (p.val - (-1.0)) / 2.0;
-                y = padTop + plotH * (1.0 - Math.max(0, Math.min(1, norm)));
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+            ctx.restore();
+
+            // 4. 正弦波モード時の振幅ガイド＆位相差 Δt アノテーション
+            if (isBode) {
+                this.drawBodeAnnotations(ctx, padLeft, plotW, plotH, padTop, zeroY, isPendulum, bodeAnalyzer, idxToX, valToY, isClosedBode);
+            }
+
+            // 5. 過渡応答モード時のアノテーション
+            if (isTransient) {
+                this.drawTransientAnnotations(ctx, padLeft, plotW, plotH, zeroY, isPendulum, transientManager);
             }
         }
-        ctx.stroke();
-        ctx.restore();
 
-        // 4. 正弦波モード時の振幅ガイド＆位相差アノテーション
-        if (isBode && bodeAnalyzer.currentAmpOut > 0.005) {
-            this.drawBodeAnnotations(ctx, padLeft, plotW, plotH, zeroY, isPendulum, bodeAnalyzer);
-        }
-
-        // 5. 過渡応答モード時のアノテーション
-        if (isTransient) {
-            this.drawTransientAnnotations(ctx, padLeft, plotW, plotH, zeroY, isPendulum, transientManager);
+        // 6. 右側リアルタイム・フェーザ図（回転ベクトル）＆波形先端接続ライン
+        if (showPhasor) {
+            this.drawPhasorDiagram(ctx, padLeft + plotW, phasorAreaW, padTop, plotH, zeroY, isPendulum, bodeAnalyzer, valToY, physics);
         }
     }
 
@@ -518,40 +570,304 @@ export class ControlCharts {
     /**
      * 正弦波モードにおける振幅比と位相遅れ Δt の図解アノテーション描画
      */
-    drawBodeAnnotations(ctx, padLeft, plotW, plotH, zeroY, isPendulum, bodeAnalyzer) {
+    drawBodeAnnotations(ctx, padLeft, plotW, plotH, padTop, zeroY, isPendulum, bodeAnalyzer, idxToX, valToY, isClosedBode) {
         ctx.save();
 
-        // 出力ピーク値の水平ガイドライン
+        // 1. 出力ピーク値の水平ガイドライン
         const ampOut = bodeAnalyzer.currentAmpOut;
-        let yTop, yBottom;
-        if (isPendulum) {
-            const deg = ampOut * (180 / Math.PI);
-            yTop = zeroY - (deg / 180) * (plotH * 0.5);
-            yBottom = zeroY + (deg / 180) * (plotH * 0.5);
-        } else {
-            yTop = zeroY - (ampOut / 1.0) * (plotH * 0.5);
-            yBottom = zeroY + (ampOut / 1.0) * (plotH * 0.5);
+        if (ampOut > 0.002) {
+            let yTop, yBottom;
+            if (isPendulum) {
+                const deg = ampOut * (180 / Math.PI);
+                yTop = zeroY - (deg / 180) * (plotH * 0.5);
+                yBottom = zeroY + (deg / 180) * (plotH * 0.5);
+            } else {
+                yTop = zeroY - (ampOut / 1.0) * (plotH * 0.5);
+                yBottom = zeroY + (ampOut / 1.0) * (plotH * 0.5);
+            }
+
+            ctx.strokeStyle = this.colors.peakLine;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([3, 3]);
+
+            ctx.beginPath();
+            ctx.moveTo(padLeft, yTop);
+            ctx.lineTo(padLeft + plotW, yTop);
+            ctx.moveTo(padLeft, yBottom);
+            ctx.lineTo(padLeft + plotW, yBottom);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // ガイドラベル: 出力振幅 Aout と倍率
+            ctx.fillStyle = '#eab308';
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'right';
+            const unit = isPendulum ? '°' : 'm';
+            const ampStr = isPendulum ? (ampOut * 180 / Math.PI).toFixed(1) : ampOut.toFixed(3);
+            const ampRatio = Math.pow(10, bodeAnalyzer.currentGainDb / 20.0);
+            const ratioLabel = isClosedBode ? ` (倍率 ×${ampRatio.toFixed(2)})` : '';
+            ctx.fillText(`+Aout: ${ampStr}${unit}${ratioLabel}`, padLeft + plotW - 4, Math.max(padTop + 10, yTop - 4));
         }
 
-        ctx.strokeStyle = this.colors.peakLine;
-        ctx.lineWidth = 1;
-        ctx.setLineDash([3, 3]);
+        // 2. 入力の山（ピーク）と出力の山（ピーク）を結ぶ位相遅れ Δt 矢印
+        const hist = this.history;
+        if (hist.length >= 12) {
+            const getInVal = (p) => isClosedBode ? p.target : p.input;
+            const period = (2.0 * Math.PI) / Math.max(0.1, bodeAnalyzer.omega);
 
+            // 入力の極大点（正のピーク）を後ろから検索し、その直後に出力の正のピークが観測できている最新ペアを探す
+            let foundPair = null;
+            for (let i = hist.length - 3; i >= 2; i--) {
+                const vPrev = getInVal(hist[i - 1]);
+                const vCurr = getInVal(hist[i]);
+                const vNext = getInVal(hist[i + 1]);
+
+                if (vCurr > 0 && vCurr >= vPrev && vCurr > vNext) {
+                    const tIn = hist[i].t;
+                    // この入力ピーク以降 0 〜 0.70 * period の範囲で出力の正ピークを探す
+                    let bestOutIdx = -1;
+                    let bestOutVal = -Infinity;
+                    for (let j = i; j < hist.length - 1; j++) {
+                        const dtPeak = hist[j].t - tIn;
+                        if (dtPeak > period * 0.7) break;
+                        const yPrev = hist[j - 1].val;
+                        const yCurr = hist[j].val;
+                        const yNext = hist[j + 1].val;
+                        if (yCurr > 0 && yCurr >= yPrev && yCurr >= yNext && yCurr > bestOutVal) {
+                            bestOutVal = yCurr;
+                            bestOutIdx = j;
+                        }
+                    }
+                    if (bestOutIdx >= i) {
+                        foundPair = { inIdx: i, outIdx: bestOutIdx };
+                        break;
+                    }
+                }
+            }
+
+            if (foundPair) {
+                const pIn = hist[foundPair.inIdx];
+                const pOut = hist[foundPair.outIdx];
+                const xIn = idxToX(foundPair.inIdx);
+                const xOut = idxToX(foundPair.outIdx);
+
+                let yIn;
+                if (isClosedBode) {
+                    yIn = valToY(pIn.target);
+                } else {
+                    const inMax = Math.max(0.1, bodeAnalyzer.amplitude);
+                    yIn = zeroY - Math.max(-1.2, Math.min(1.2, pIn.input / inMax)) * (plotH * 0.30);
+                }
+                const yOut = valToY(pOut.val);
+                const dtDelay = Math.max(0, pOut.t - pIn.t);
+                const phaseFromDtDeg = -(dtDelay / period) * 360.0;
+
+                // 位相遅れ区間のハイライト帯
+                if (xOut >= xIn) {
+                    ctx.fillStyle = 'rgba(245, 158, 11, 0.10)';
+                    ctx.fillRect(xIn, padTop, Math.max(2, xOut - xIn), plotH);
+                }
+
+                // 山頂マーカー点（入力: 緑, 出力: シアン）
+                ctx.fillStyle = this.colors.control;
+                ctx.beginPath();
+                ctx.arc(xIn, yIn, 3.8, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = this.colors.signal;
+                ctx.beginPath();
+                ctx.arc(xOut, yOut, 3.8, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 矢印ガイド線とラベル
+                const arrowY = padTop + 14;
+                ctx.strokeStyle = 'rgba(245, 158, 11, 0.65)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([2, 2]);
+                ctx.beginPath();
+                ctx.moveTo(xIn, yIn);
+                ctx.lineTo(xIn, arrowY);
+                ctx.moveTo(xOut, yOut);
+                ctx.lineTo(xOut, arrowY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // 水平矢印
+                ctx.strokeStyle = this.colors.dtArrow;
+                ctx.lineWidth = 1.6;
+                ctx.beginPath();
+                ctx.moveTo(xIn, arrowY);
+                ctx.lineTo(xOut, arrowY);
+                ctx.stroke();
+
+                if (xOut - xIn > 10) {
+                    // 矢じり
+                    ctx.fillStyle = this.colors.dtArrow;
+                    ctx.beginPath();
+                    ctx.moveTo(xOut, arrowY);
+                    ctx.lineTo(xOut - 5, arrowY - 3);
+                    ctx.lineTo(xOut - 5, arrowY + 3);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+
+                // Δt / φ テキスト
+                const delayLabel = `遅れ Δt=${dtDelay.toFixed(2)}s (${phaseFromDtDeg.toFixed(0)}°)`;
+                ctx.font = 'bold 9px monospace';
+                const labelX = Math.max(padLeft + 60, Math.min(padLeft + plotW - 60, (xIn + xOut) * 0.5));
+                ctx.textAlign = 'center';
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+                const tw = ctx.measureText(delayLabel).width + 8;
+                ctx.fillRect(labelX - tw * 0.5, arrowY + 3, tw, 13);
+                ctx.fillStyle = '#fbbf24';
+                ctx.fillText(delayLabel, labelX, arrowY + 13);
+            }
+        }
+
+        ctx.restore();
+    }
+
+    /**
+     * 右側のリアルタイム・フェーザ図（回転ベクトル）を描画し、波形先端と水平線で接続
+     */
+    drawPhasorDiagram(ctx, areaLeft, areaW, padTop, plotH, zeroY, isPendulum, bodeAnalyzer, valToY, physics) {
+        ctx.save();
+
+        // 境界線
+        ctx.strokeStyle = this.colors.axis;
+        ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(padLeft, yTop);
-        ctx.lineTo(padLeft + plotW, yTop);
-        ctx.moveTo(padLeft, yBottom);
-        ctx.lineTo(padLeft + plotW, yBottom);
+        ctx.moveTo(areaLeft, padTop);
+        ctx.lineTo(areaLeft, padTop + plotH);
         ctx.stroke();
+
+        // タイトル
+        const cx = areaLeft + areaW * 0.52;
+        const cy = zeroY;
+        const maxR = Math.min(areaW * 0.41, plotH * 0.44);
+
+        ctx.fillStyle = '#cbd5e1';
+        ctx.font = 'bold 9px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText('フェーザ図 (回転ベクトル)', areaLeft + areaW * 0.5, padTop - 13);
+
+        // 背景十字軸と単位基準円
+        ctx.strokeStyle = this.colors.grid;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(cx - maxR - 4, cy);
+        ctx.lineTo(cx + maxR + 4, cy);
+        ctx.moveTo(cx, cy - maxR - 4);
+        ctx.lineTo(cx, cy + maxR + 4);
+        ctx.stroke();
+
+        const isClosedBode = bodeAnalyzer.loopType === 'closed';
+        const thetaIn = bodeAnalyzer.getCurrentInputPhaseRad();
+        const phaseRad = (bodeAnalyzer.currentPhaseDeg * Math.PI) / 180.0;
+        const thetaOut = thetaIn + phaseRad;
+
+        // 入力ベクトルの半径（時系列グラフ側の振幅とY高さを一致）
+        let rIn;
+        if (isClosedBode) {
+            const ampInVal = isPendulum ? (bodeAnalyzer.amplitude * 180 / Math.PI) : bodeAnalyzer.amplitude;
+            const yAmp = Math.abs(zeroY - valToY(ampInVal));
+            rIn = Math.min(maxR, Math.max(8, yAmp));
+        } else {
+            rIn = Math.min(maxR * 0.92, plotH * 0.30);
+        }
+
+        // 出力ベクトルの半径
+        const ampOut = bodeAnalyzer.currentAmpOut;
+        let rOutPx;
+        if (isPendulum) {
+            rOutPx = ((ampOut * 180 / Math.PI) / 180) * (plotH * 0.5);
+        } else {
+            rOutPx = (ampOut / 1.0) * (plotH * 0.5);
+        }
+        const rOut = Math.min(maxR, Math.max(4, rOutPx));
+
+        // 入力の基準円（薄い緑点線）
+        ctx.strokeStyle = 'rgba(16, 185, 129, 0.25)';
+        ctx.setLineDash([2, 2]);
+        ctx.beginPath();
+        ctx.arc(cx, cy, rIn, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // 出力の振幅円（薄いシアン点線）
+        if (ampOut > 0.002) {
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
+            ctx.beginPath();
+            ctx.arc(cx, cy, rOut, 0, Math.PI * 2);
+            ctx.stroke();
+        }
         ctx.setLineDash([]);
 
-        // ガイドラベル: 出力振幅 Aout
+        // 位相差 φ の扇形ハイライト
+        if (ampOut > 0.002 && Math.abs(phaseRad) > 0.03) {
+            ctx.fillStyle = 'rgba(234, 179, 8, 0.16)';
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            // Canvas の arc は時計回り正なので -theta が数学角
+            const startAng = -thetaIn;
+            const endAng = -thetaOut;
+            ctx.arc(cx, cy, Math.min(rIn, rOut, maxR * 0.65), startAng, endAng, phaseRad > 0);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // ヘルパー: ベクトル矢印描画
+        const drawVector = (angleRad, radius, color, label) => {
+            const vx = cx + radius * Math.cos(angleRad);
+            const vy = cy - radius * Math.sin(angleRad);
+
+            // 波形の先端（左境界）への水平射影破線
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.globalAlpha = 0.45;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([2, 2]);
+            ctx.beginPath();
+            ctx.moveTo(vx, vy);
+            ctx.lineTo(areaLeft, vy);
+            ctx.stroke();
+            ctx.restore();
+
+            // 矢印本体
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color;
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(vx, vy);
+            ctx.stroke();
+
+            // 先端ドット
+            ctx.beginPath();
+            ctx.arc(vx, vy, 3.2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // ラベル
+            const lx = cx + (radius + 9) * Math.cos(angleRad);
+            const ly = cy - (radius + 9) * Math.sin(angleRad);
+            ctx.font = 'bold 9px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, lx, ly);
+        };
+
+        drawVector(thetaIn, rIn, this.colors.control, 'U');
+        if (ampOut > 0.002) {
+            drawVector(thetaOut, rOut, this.colors.signal, 'Y');
+        }
+
+        // 下部数値バッジ（位相差 φ と倍率）
         ctx.fillStyle = '#eab308';
-        ctx.font = '10px monospace';
-        ctx.textAlign = 'right';
-        const unit = isPendulum ? '°' : 'm';
-        const ampStr = isPendulum ? (ampOut * 180 / Math.PI).toFixed(1) : ampOut.toFixed(3);
-        ctx.fillText(`+Aout: ${ampStr}${unit}`, padLeft + plotW - 4, yTop - 3);
+        ctx.font = 'bold 9px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        const phiTxt = ampOut > 0.002 ? `φ = ${bodeAnalyzer.currentPhaseDeg.toFixed(0)}°` : '計測中...';
+        ctx.fillText(phiTxt, cx, padTop + plotH + 14);
 
         ctx.restore();
     }
