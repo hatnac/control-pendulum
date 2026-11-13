@@ -608,7 +608,7 @@ kbd {
     overflow: hidden;
 }
 
-canvas#timeCanvas, canvas#phaseCanvas, canvas#bodeCanvas {
+canvas#timeCanvas, canvas#phaseCanvas, canvas#bodeCanvas, canvas#nyquistCanvas {
     position: absolute;
     top: 0;
     left: 0;
@@ -617,7 +617,7 @@ canvas#timeCanvas, canvas#phaseCanvas, canvas#bodeCanvas {
     display: block;
 }
 
-canvas#bodeCanvas {
+canvas#bodeCanvas, canvas#nyquistCanvas {
     cursor: crosshair;
     touch-action: none;
 }

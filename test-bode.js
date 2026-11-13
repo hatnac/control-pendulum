@@ -163,5 +163,27 @@ function assert(condition, message) {
     assert(highInsight.region === 'high', `Insight region at ω=12.0 is 'high' (actual=${highInsight.region})`);
 }
 
+// 6. ベクトル軌跡 (複素平面 Re/Im ＆ 一巡伝達関数 L(jω)) 計算テスト
+{
+    const msd = new MassSpringDamperPhysics();
+    msd.m = 1.0;
+    msd.k = 16.0;
+    msd.d = 1.6; // wn = 4.0
+
+    // ω=0.001 (DC): G(j0) ≈ 1/K = 0.0625 + j0
+    const dcPt = BodeAnalyzer.evaluatePoint(0.001, 'msd', msd, 'open');
+    assert(Math.abs(dcPt.re - 0.0625) < 1e-4 && Math.abs(dcPt.im) < 1e-4, `Vector locus at DC ≈ (0.0625, 0): (${dcPt.re.toFixed(4)}, ${dcPt.im.toFixed(4)})`);
+
+    // ω=wn=4.0 (共振): Re = 0, Im = -1/(D*wn) = -1/6.4 = -0.15625
+    const resPt = BodeAnalyzer.evaluatePoint(4.0, 'msd', msd, 'open');
+    assert(Math.abs(resPt.re) < 1e-5 && Math.abs(resPt.im - (-1.0 / 6.4)) < 1e-4, `Vector locus at ωn=4.0 is on negative Im axis: (${resPt.re.toFixed(4)}, ${resPt.im.toFixed(4)})`);
+
+    // 一巡伝達関数 L(jω) の計算チェック
+    const pid = new PIDController();
+    pid.kp = 30.0; pid.ki = 12.0; pid.kd = 8.0;
+    const loopPt = BodeAnalyzer.evaluateOpenLoopL(4.0, 'msd', msd, pid);
+    assert(isFinite(loopPt.re) && isFinite(loopPt.im) && loopPt.gain > 0, `Open-loop L(j4.0) computed cleanly: (${loopPt.re.toFixed(3)}, ${loopPt.im.toFixed(3)})`);
+}
+
 console.log(`\n=== Verification Finished: ${failed === 0 ? 'ALL TESTS PASSED' : failed + ' TESTS FAILED'} ===`);
 if (failed > 0) process.exit(1);

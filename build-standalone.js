@@ -34,6 +34,10 @@ const bodeRenderer = fs.readFileSync('js/bode-renderer.js', 'utf8')
     .replace(/import\s+.*?;/g, '')
     .replace(/export\s+class\s+BodeRenderer/, 'class BodeRenderer');
 
+const nyquistRenderer = fs.readFileSync('js/nyquist-renderer.js', 'utf8')
+    .replace(/import\s+.*?;/g, '')
+    .replace(/export\s+class\s+NyquistRenderer/, 'class NyquistRenderer');
+
 const transient = fs.readFileSync('js/transient.js', 'utf8')
     .replace(/import\s+.*?;/g, '')
     .replace(/export\s+class\s+TransientManager/, 'class TransientManager');
@@ -43,7 +47,7 @@ const app = fs.readFileSync('js/app.js', 'utf8')
 
 let combined = html
     .replace('<link rel="stylesheet" href="css/style.css">', '<style>\n' + css + '\n</style>')
-    .replace('<script type="module" src="js/app.js"></script>', '<script>\n' + physics + '\n' + renderer + '\n' + physicsMSD + '\n' + rendererMSD + '\n' + charts + '\n' + pid + '\n' + bode + '\n' + bodeRenderer + '\n' + transient + '\n' + app + '\n</script>');
+    .replace('<script type="module" src="js/app.js"></script>', '<script>\n' + physics + '\n' + renderer + '\n' + physicsMSD + '\n' + rendererMSD + '\n' + charts + '\n' + pid + '\n' + bode + '\n' + bodeRenderer + '\n' + nyquistRenderer + '\n' + transient + '\n' + app + '\n</script>');
 
 fs.writeFileSync('standalone.html', combined, 'utf8');
 console.log('standalone.html created successfully!');

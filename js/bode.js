@@ -290,15 +290,48 @@ export class BodeAnalyzer {
 
             let phaseDeg = Math.atan2(tIm, tRe) * (180.0 / Math.PI);
             if (phaseDeg > 15.0) phaseDeg -= 360.0;
-            return { omega: w, gain, gainDb, phaseDeg };
+            return { omega: w, re: tRe, im: tIm, gain, gainDb, phaseDeg };
         } else {
-            // 開ループ G(jω) = 1 / (invRe + j*invIm)
-            const denomMag = Math.max(1e-6, Math.sqrt(invRe * invRe + invIm * invIm));
+            // 開ループ G(jω) = 1 / (invRe + j*invIm) = (invRe - j*invIm) / (invRe^2 + invIm^2)
+            const denomMagSq = Math.max(1e-12, invRe * invRe + invIm * invIm);
+            const gRe = invRe / denomMagSq;
+            const gIm = -invIm / denomMagSq;
+            const denomMag = Math.max(1e-6, Math.sqrt(denomMagSq));
             const gain = 1.0 / denomMag;
             const gainDb = Math.max(-100, Math.min(100, 20.0 * Math.log10(Math.max(1e-6, gain))));
             const phaseDeg = -Math.atan2(invIm, invRe) * (180.0 / Math.PI);
-            return { omega: w, gain, gainDb, phaseDeg };
+            return { omega: w, re: gRe, im: gIm, gain, gainDb, phaseDeg };
         }
+    }
+
+    /**
+     * 一巡伝達関数 L(jω) = C_fb(jω) * G(jω) の計算（ナイキスト線図・安定余裕確認用）
+     */
+    static evaluateOpenLoopL(w, systemType, physics, pid) {
+        let invRe, invIm;
+        if (systemType === 'msd') {
+            invRe = physics.k - physics.m * w * w;
+            invIm = physics.d * w;
+        } else {
+            const J = physics.m * physics.l * physics.l;
+            const mgl = physics.m * physics.g * physics.l;
+            invRe = mgl - J * w * w;
+            invIm = physics.c * w;
+        }
+
+        const wSafe = Math.max(1e-4, w);
+        const cRe = pid ? pid.kp : 1.0;
+        const cIm = pid ? (pid.kd * w - pid.ki / wSafe) : 0.0;
+
+        const denMagSq = Math.max(1e-12, invRe * invRe + invIm * invIm);
+        const lRe = (cRe * invRe + cIm * invIm) / denMagSq;
+        const lIm = (cIm * invRe - cRe * invIm) / denMagSq;
+        const gain = Math.sqrt(lRe * lRe + lIm * lIm);
+        const gainDb = Math.max(-100, Math.min(100, 20.0 * Math.log10(Math.max(1e-6, gain))));
+        let phaseDeg = Math.atan2(lIm, lRe) * (180.0 / Math.PI);
+        if (phaseDeg > 15.0) phaseDeg -= 360.0;
+
+        return { omega: w, re: lRe, im: lIm, gain, gainDb, phaseDeg };
     }
 
     /**

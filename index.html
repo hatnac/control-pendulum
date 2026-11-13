@@ -331,6 +331,23 @@
                     <canvas id="bodeCanvas" style="display: none;"></canvas>
                 </div>
             </div>
+
+            <!-- ボード線図の下: ベクトル軌跡 (ナイキスト線図) -->
+            <div class="chart-box" id="nyquist-chart-box" style="display: none;">
+                <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                    <span>🧭 ベクトル軌跡 (ナイキスト線図)</span>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <div class="chart-subtab-group" id="nyquist-type-tabs" style="display: none;">
+                            <button id="btn-nyq-matched" class="btn-subtab active" title="ボード線図と対応する閉ループ伝達関数 T(jω) のベクトル軌跡">T(jω) 閉ループ</button>
+                            <button id="btn-nyq-loop" class="btn-subtab" title="(-1, 0)臨界点と安定余裕を見る一巡伝達関数 L(jω) のナイキスト線図">L(jω) 一巡/安定余裕</button>
+                        </div>
+                        <span id="nyquist-chart-sub" style="font-size: 0.72rem; color: var(--text-muted);">G(jω) 複素平面</span>
+                    </div>
+                </div>
+                <div class="chart-canvas-wrapper">
+                    <canvas id="nyquistCanvas"></canvas>
+                </div>
+            </div>
         </section>
 
         <!-- セクション 3: パラメータ設定 & プリセット & 解説 -->

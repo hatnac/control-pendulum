@@ -11,6 +11,7 @@ import { ControlCharts } from './charts.js';
 import { PIDController } from './pid.js';
 import { BodeAnalyzer } from './bode.js';
 import { BodeRenderer } from './bode-renderer.js';
+import { NyquistRenderer } from './nyquist-renderer.js';
 import { TransientManager } from './transient.js';
 
 class ControlApp {
@@ -42,11 +43,13 @@ class ControlApp {
         this.timeCanvas = document.getElementById('timeCanvas');
         this.phaseCanvas = document.getElementById('phaseCanvas');
         this.bodeCanvas = document.getElementById('bodeCanvas');
+        this.nyquistCanvas = document.getElementById('nyquistCanvas');
 
         this.renderer = new PendulumRenderer(this.simCanvas);
         this.msdRenderer = new MassSpringDamperRenderer(this.simCanvas);
         this.charts = new ControlCharts(this.timeCanvas, this.phaseCanvas);
         this.bodeRenderer = new BodeRenderer(this.bodeCanvas);
+        this.nyquistRenderer = new NyquistRenderer(this.nyquistCanvas);
 
         // 操作状態
         this.isPaused = false;
@@ -113,6 +116,7 @@ class ControlApp {
         this.initSliderEvents();
         this.initDragEvents();
         this.initBodeCanvasEvents();
+        this.initNyquistCanvasEvents();
         this.initMobileTabs();
         this.initShareModal();
         this.updateParamUIFromPhysics();
@@ -261,6 +265,13 @@ class ControlApp {
         this.btnChartBode = document.getElementById('btn-chart-bode');
         this.secondaryChartSub = document.getElementById('secondary-chart-sub');
 
+        // ベクトル軌跡（ナイキスト線図）DOM
+        this.nyquistChartBox = document.getElementById('nyquist-chart-box');
+        this.nyquistTypeTabs = document.getElementById('nyquist-type-tabs');
+        this.btnNyqMatched = document.getElementById('btn-nyq-matched');
+        this.btnNyqLoop = document.getElementById('btn-nyq-loop');
+        this.nyquistChartSub = document.getElementById('nyquist-chart-sub');
+
         // スライダー関連DOM
         this.sliderArea = document.getElementById('torque-slider-area');
         this.sliderTrack = document.getElementById('torque-slider-track');
@@ -343,6 +354,24 @@ class ControlApp {
         }
         if (this.btnChartBode) {
             this.btnChartBode.addEventListener('click', () => this.setSecondaryChart('bode'));
+        }
+
+        // ベクトル軌跡表示モード切替 (閉ループ時: T(jω) ⇔ L(jω)一巡)
+        if (this.btnNyqMatched) {
+            this.btnNyqMatched.addEventListener('click', () => {
+                this.nyquistRenderer.setNyquistMode('matched');
+                this.btnNyqMatched.classList.add('active');
+                if (this.btnNyqLoop) this.btnNyqLoop.classList.remove('active');
+                this.updateBodeUI();
+            });
+        }
+        if (this.btnNyqLoop) {
+            this.btnNyqLoop.addEventListener('click', () => {
+                this.nyquistRenderer.setNyquistMode('loop');
+                this.btnNyqLoop.classList.add('active');
+                if (this.btnNyqMatched) this.btnNyqMatched.classList.remove('active');
+                this.updateBodeUI();
+            });
         }
 
         // 正弦波周波数スライダー
@@ -971,6 +1000,7 @@ class ControlApp {
 
         if (this.phaseCanvas) this.phaseCanvas.style.display = type === 'phase' ? 'block' : 'none';
         if (this.bodeCanvas) this.bodeCanvas.style.display = type === 'bode' ? 'block' : 'none';
+        if (this.nyquistChartBox) this.nyquistChartBox.style.display = type === 'bode' ? 'flex' : 'none';
 
         if (this.secondaryChartSub) {
             this.secondaryChartSub.textContent = type === 'phase' ? '平衡点と状態軌跡' : '周波数応答 (ゲイン & 位相)';
@@ -1043,6 +1073,71 @@ class ControlApp {
             this.bodeInsightDesc.textContent = insight.description;
             this.bodeInsightBox.className = `bode-insight-box region-${insight.region}`;
         }
+
+        // ベクトル軌跡のサブUI同期
+        if (this.nyquistTypeTabs) {
+            this.nyquistTypeTabs.style.display = isClosed ? 'flex' : 'none';
+        }
+        if (this.nyquistChartSub && this.nyquistRenderer) {
+            if (!isClosed) {
+                this.nyquistChartSub.textContent = 'G(jω) 複素平面';
+            } else {
+                this.nyquistChartSub.textContent = this.nyquistRenderer.nyquistMode === 'loop'
+                    ? 'L(jω) 一巡安定余裕'
+                    : 'T(jω) 閉ループ複素平面';
+            }
+        }
+    }
+
+    initNyquistCanvasEvents() {
+        const canvas = this.nyquistCanvas;
+        if (!canvas) return;
+
+        let isNyquistDragging = false;
+
+        const updateOmegaFromPoint = (clientX, clientY) => {
+            const rect = canvas.getBoundingClientRect();
+            const cx = clientX - rect.left;
+            const cy = clientY - rect.top;
+            const w = this.nyquistRenderer.findNearestOmega(cx, cy);
+            if (w !== null) {
+                const clampedW = Math.max(0.2, Math.min(25.0, w));
+                this.bodeAnalyzer.stopSweep();
+                this.bodeAnalyzer.setOmega(clampedW);
+                if (this.paramBodeOmega) this.paramBodeOmega.value = clampedW.toFixed(2);
+                this.updateBodeUI();
+            }
+        };
+
+        canvas.addEventListener('mousedown', (e) => {
+            isNyquistDragging = true;
+            updateOmegaFromPoint(e.clientX, e.clientY);
+        });
+        window.addEventListener('mousemove', (e) => {
+            if (!isNyquistDragging) return;
+            updateOmegaFromPoint(e.clientX, e.clientY);
+        });
+        window.addEventListener('mouseup', () => {
+            isNyquistDragging = false;
+        });
+
+        canvas.addEventListener('touchstart', (e) => {
+            isNyquistDragging = true;
+            if (e.touches && e.touches[0]) {
+                updateOmegaFromPoint(e.touches[0].clientX, e.touches[0].clientY);
+            }
+            if (e.cancelable) e.preventDefault();
+        }, { passive: false });
+        window.addEventListener('touchmove', (e) => {
+            if (!isNyquistDragging) return;
+            if (e.touches && e.touches[0]) {
+                updateOmegaFromPoint(e.touches[0].clientX, e.touches[0].clientY);
+            }
+            if (e.cancelable) e.preventDefault();
+        }, { passive: false });
+        window.addEventListener('touchend', () => {
+            isNyquistDragging = false;
+        });
     }
 
     initBodeCanvasEvents() {
@@ -1350,6 +1445,7 @@ class ControlApp {
         if (this.msdRenderer) this.msdRenderer.resize();
         if (this.charts) this.charts.resize();
         if (this.bodeRenderer) this.bodeRenderer.resize();
+        if (this.nyquistRenderer) this.nyquistRenderer.resize();
     }
 
     handleKeyDown(e) {
@@ -1759,6 +1855,9 @@ class ControlApp {
 
             if (this.activeSecondaryChart === 'bode') {
                 this.bodeRenderer.draw(this.bodeAnalyzer, this.activeSystem, this.currentPhysics, this.currentPID);
+                if (this.nyquistRenderer) {
+                    this.nyquistRenderer.draw(this.bodeAnalyzer, this.activeSystem, this.currentPhysics, this.currentPID);
+                }
             }
         } catch (err) {
             console.error('Animation loop error:', err);
