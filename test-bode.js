@@ -185,5 +185,44 @@ function assert(condition, message) {
     assert(isFinite(loopPt.re) && isFinite(loopPt.im) && loopPt.gain > 0, `Open-loop L(j4.0) computed cleanly: (${loopPt.re.toFixed(3)}, ${loopPt.im.toFixed(3)})`);
 }
 
+// 7. DCゲイン正規化表示オプションテスト
+{
+    const msd = new MassSpringDamperPhysics();
+    msd.m = 1.0;
+    msd.k = 16.0;
+    msd.d = 1.6; // wn = 4.0, zeta = 0.2, dcGain = 1/16 -> -24.0824 dB
+
+    const analyzer = new BodeAnalyzer();
+    analyzer.setLoopType('open');
+    assert(analyzer.normalizeDcGain === false, 'DC normalization defaults to false');
+    assert(analyzer.getDisplayGainOffsetDb('msd', msd) === 0.0, 'Offset dB is 0 when normalization is disabled');
+
+    analyzer.setNormalizeDcGain(true);
+    const expectedOffset = 20.0 * Math.log10(16.0);
+    const actualOffset = analyzer.getDisplayGainOffsetDb('msd', msd);
+    assert(Math.abs(actualOffset - expectedOffset) < 0.01, `Offset dB equals +20*log10(K)=${expectedOffset.toFixed(2)} (actual=${actualOffset.toFixed(2)})`);
+
+    analyzer.setOmega(0.001);
+    const dcInsight = analyzer.getLearningInsight('msd', msd);
+    assert(dcInsight.isDcNormalized === true, 'isDcNormalized is true in MSD open-loop');
+    assert(Math.abs(dcInsight.displayGainDb - 0.0) < 0.01, `Normalized DC gain at ω→0 is 0.0 dB (actual=${dcInsight.displayGainDb.toFixed(3)})`);
+
+    analyzer.setOmega(4.0); // resonance ω = ωn
+    const resInsight = analyzer.getLearningInsight('msd', msd);
+    const expectedResDb = 20.0 * Math.log10(1.0 / (2.0 * 0.2)); // +7.9588 dB
+    assert(Math.abs(resInsight.displayGainDb - expectedResDb) < 0.05, `Normalized resonance gain ≈ ${expectedResDb.toFixed(2)} dB (actual=${resInsight.displayGainDb.toFixed(2)})`);
+
+    // 閉ループ時は正規化オフセットは 0 dB
+    analyzer.setLoopType('closed');
+    assert(analyzer.isDcNormalizedActive('msd', msd) === false, 'isDcNormalizedActive is false in closed-loop');
+    assert(analyzer.getDisplayGainOffsetDb('msd', msd) === 0.0, 'Offset dB is 0 in closed-loop');
+
+    // 無重力状態 (g=0) の振子では静的復元力ゼロのため正規化無効フォールバック
+    analyzer.setLoopType('open');
+    const zeroGPendulum = { m: 1.0, g: 0.0, l: 1.0, d: 0.2 };
+    assert(analyzer.isDcNormalizedActive('pendulum', zeroGPendulum) === false, 'Zero-g pendulum disables DC normalization safely');
+    assert(analyzer.getDisplayGainOffsetDb('pendulum', zeroGPendulum) === 0.0, 'Zero-g pendulum offset dB falls back to 0');
+}
+
 console.log(`\n=== Verification Finished: ${failed === 0 ? 'ALL TESTS PASSED' : failed + ' TESTS FAILED'} ===`);
 if (failed > 0) process.exit(1);

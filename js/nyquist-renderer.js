@@ -71,6 +71,14 @@ export class NyquistRenderer {
     computeCurvePoints(analyzer, systemType, physics, pid) {
         const isClosed = (analyzer.loopType || 'open') === 'closed';
         const isLoopL = isClosed && this.nyquistMode === 'loop';
+        const isNormalized = !isClosed && (analyzer.isDcNormalizedActive ? analyzer.isDcNormalizedActive(systemType, physics) : false);
+        let scale = 1.0;
+        let offsetDb = 0.0;
+        if (isNormalized) {
+            const chars = BodeAnalyzer.computeSystemCharacteristics(systemType, physics, 'open', null);
+            scale = 1.0 / Math.max(1e-6, chars.dcGain);
+            offsetDb = -chars.dcGainDb;
+        }
 
         const N = 180;
         const wMin = 0.05;
@@ -84,9 +92,20 @@ export class NyquistRenderer {
             const pt = isLoopL
                 ? BodeAnalyzer.evaluateOpenLoopL(w, systemType, physics, pid)
                 : BodeAnalyzer.evaluatePoint(w, systemType, physics, isClosed ? 'closed' : 'open', pid);
-            pts.push(pt);
+            if (isNormalized) {
+                pts.push({
+                    omega: pt.omega,
+                    re: pt.re * scale,
+                    im: pt.im * scale,
+                    gain: pt.gain * scale,
+                    gainDb: pt.gainDb + offsetDb,
+                    phaseDeg: pt.phaseDeg
+                });
+            } else {
+                pts.push(pt);
+            }
         }
-        return { pts, isClosed, isLoopL };
+        return { pts, isClosed, isLoopL, isNormalized, scale };
     }
 
     /**
@@ -153,20 +172,21 @@ export class NyquistRenderer {
         const plotCenterX = padLeft + plotW * 0.5;
         const plotCenterY = padTop + plotH * 0.5;
 
-        const { pts, isClosed, isLoopL } = this.computeCurvePoints(analyzer, systemType, physics, pid);
+        const { pts, isClosed, isLoopL, isNormalized, scale } = this.computeCurvePoints(analyzer, systemType, physics, pid);
         this.lastCurvePoints = pts;
 
         const chars = BodeAnalyzer.computeSystemCharacteristics(systemType, physics, isClosed ? 'closed' : 'open', pid);
+        const effDcGain = isNormalized ? 1.0 : chars.dcGain;
 
         // バウンディングボックス計算（極端な発散点を除外しつつ主要範囲を確保）
         const capRadius = isLoopL
             ? 3.8
-            : (isClosed ? 3.5 : Math.max(0.5, chars.dcGain * 6.5));
+            : (isClosed ? 3.5 : Math.max(0.5, effDcGain * 6.5));
 
-        let minRe = isLoopL ? -1.4 : (isClosed ? -0.3 : -chars.dcGain * 0.3);
-        let maxRe = isLoopL ? 0.8 : (isClosed ? 1.25 : Math.max(0.05, chars.dcGain * 1.15));
-        let minIm = isLoopL ? -2.2 : (isClosed ? -0.9 : -chars.dcGain * 1.2);
-        let maxIm = isLoopL ? 0.6 : (isClosed ? 0.35 : chars.dcGain * 0.25);
+        let minRe = isLoopL ? -1.4 : (isClosed ? -0.3 : -effDcGain * 0.3);
+        let maxRe = isLoopL ? 0.8 : (isClosed ? 1.25 : Math.max(0.05, effDcGain * 1.15));
+        let minIm = isLoopL ? -2.2 : (isClosed ? -0.9 : -effDcGain * 1.2);
+        let maxIm = isLoopL ? 0.6 : (isClosed ? 0.35 : effDcGain * 0.25);
 
         // 必ず原点 (0,0) を含める
         minRe = Math.min(minRe, 0);
@@ -241,8 +261,8 @@ export class NyquistRenderer {
         ctx.lineTo(ox, padTop + plotH);
         ctx.stroke();
 
-        // 2. 単位円や基準点（閉ループ T / 一巡 L）
-        if (isClosed) {
+        // 2. 単位円や基準点（閉ループ T / 一巡 L / 開ループ DC正規化）
+        if (isClosed || isNormalized) {
             ctx.strokeStyle = this.colors.unitCircle;
             ctx.lineWidth = 1.1;
             ctx.setLineDash([4, 4]);
@@ -250,7 +270,9 @@ export class NyquistRenderer {
             ctx.arc(ox, oy, 1.0 * pxPerUnit, 0, Math.PI * 2);
             ctx.stroke();
             ctx.setLineDash([]);
+        }
 
+        if (isClosed) {
             if (isLoopL) {
                 // (-1, j0) ナイキスト臨界点
                 const cxCrit = reToX(-1.0);
@@ -282,8 +304,8 @@ export class NyquistRenderer {
                 ctx.fillText('理想(1,0)', cxIdeal - 5, cyIdeal - 6);
             }
         } else {
-            // 開ループ: DCゲイン点 (1/K, 0)
-            const cxDc = reToX(chars.dcGain);
+            // 開ループ: DCゲイン点 ((1/K, 0) または正規化時は (1, 0))
+            const cxDc = reToX(effDcGain);
             const cyDc = imToY(0);
             ctx.fillStyle = '#10b981';
             ctx.beginPath();
@@ -291,7 +313,7 @@ export class NyquistRenderer {
             ctx.fill();
             ctx.font = '9px monospace';
             ctx.textAlign = 'center';
-            ctx.fillText('ω=0', cxDc, cyDc - 7);
+            ctx.fillText(isNormalized ? 'ω=0 (1,0)' : 'ω=0', cxDc, cyDc - 7);
         }
 
         // 3. 理論ベクトル軌跡の描画
@@ -340,8 +362,8 @@ export class NyquistRenderer {
         // 固有角周波数 ωn (開ループ時) のマーカー
         if (!isClosed && isFinite(chars.wn)) {
             const wnPt = BodeAnalyzer.evaluatePoint(chars.wn, systemType, physics, 'open', null);
-            const wx = reToX(wnPt.re);
-            const wy = imToY(wnPt.im);
+            const wx = reToX(wnPt.re * scale);
+            const wy = imToY(wnPt.im * scale);
             if (wy >= padTop && wy <= padTop + plotH) {
                 ctx.fillStyle = '#38bdf8';
                 ctx.beginPath();
@@ -357,7 +379,7 @@ export class NyquistRenderer {
         if (!isLoopL && analyzer.measurements && analyzer.measurements.length > 0) {
             ctx.fillStyle = this.colors.measured;
             for (const mPt of analyzer.measurements) {
-                const mag = Math.pow(10, mPt.gainDb / 20.0);
+                const mag = Math.pow(10, mPt.gainDb / 20.0) * scale;
                 const rad = (mPt.phaseDeg * Math.PI) / 180.0;
                 const re = mag * Math.cos(rad);
                 const im = mag * Math.sin(rad);
@@ -370,9 +392,12 @@ export class NyquistRenderer {
         }
 
         // 5. 現在周波数 ω の位置ベクトル矢印（原点 -> G(jω)）と位相差扇形
-        const curPt = isLoopL
+        const rawCurPt = isLoopL
             ? BodeAnalyzer.evaluateOpenLoopL(analyzer.omega, systemType, physics, pid)
             : BodeAnalyzer.evaluatePoint(analyzer.omega, systemType, physics, isClosed ? 'closed' : 'open', pid);
+        const curPt = isNormalized
+            ? { ...rawCurPt, re: rawCurPt.re * scale, im: rawCurPt.im * scale, gain: rawCurPt.gain * scale }
+            : rawCurPt;
 
         if (isFinite(curPt.re) && isFinite(curPt.im)) {
             const cxCur = reToX(curPt.re);
@@ -464,7 +489,7 @@ export class NyquistRenderer {
         ctx.font = 'bold 9px monospace';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'top';
-        const sym = isLoopL ? 'L' : (isClosed ? 'T' : 'G');
+        const sym = isLoopL ? 'L' : (isClosed ? 'T' : (isNormalized ? 'G/G0' : 'G'));
         if (w < 420) {
             ctx.fillText(
                 `${sym}(j${analyzer.omega.toFixed(2)}): |${curPt.gain.toFixed(3)}| ∠${curPt.phaseDeg.toFixed(0)}°`,

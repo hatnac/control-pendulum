@@ -151,6 +151,8 @@ export class BodeRenderer {
         const phasePlotTop = padTop + gainPlotH + gap;
 
         const loopType = analyzer.loopType || 'open';
+        const offsetDb = analyzer.getDisplayGainOffsetDb ? analyzer.getDisplayGainOffsetDb(systemType, physics) : 0.0;
+        const isNormalized = analyzer.isDcNormalizedActive ? analyzer.isDcNormalizedActive(systemType, physics) : false;
 
         // 0. 学習ガイド（3領域背景色分け）
         if (this.showGuide) {
@@ -158,24 +160,24 @@ export class BodeRenderer {
         }
 
         // 1. グリッドと目盛り
-        this.drawGridsAndAxes(plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, padLeft, padRight, loopType);
+        this.drawGridsAndAxes(plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, padLeft, padRight, loopType, isNormalized);
 
         // 2. 学習ガイド（漸近線・共振点/帯域幅マーカー）
         if (this.showGuide) {
-            this.drawLearningOverlays(analyzer, systemType, physics, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH);
+            this.drawLearningOverlays(analyzer, systemType, physics, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, offsetDb);
         }
 
         // 3. 理論曲線の描画（高解像度サンプル）
-        this.drawTheoreticalCurves(systemType, physics, loopType, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH);
+        this.drawTheoreticalCurves(systemType, physics, loopType, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, offsetDb);
 
         // 4. 実測プロット点の描画
-        this.drawMeasuredPlots(analyzer.measurements, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH);
+        this.drawMeasuredPlots(analyzer.measurements, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, offsetDb);
 
         // 5. 現在入力中の周波数カーソル＆リアルタイム点
-        this.drawCurrentCursor(analyzer, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH);
+        this.drawCurrentCursor(analyzer, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, offsetDb);
 
         // 6. 凡例＆HUD
-        this.drawLegend(analyzer, padLeft, gainPlotTop, phasePlotTop);
+        this.drawLegend(analyzer, padLeft, gainPlotTop, phasePlotTop, isNormalized);
     }
 
     drawRegionBackgrounds(analyzer, systemType, physics, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH) {
@@ -225,7 +227,7 @@ export class BodeRenderer {
         ctx.restore();
     }
 
-    drawLearningOverlays(analyzer, systemType, physics, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH) {
+    drawLearningOverlays(analyzer, systemType, physics, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, offsetDb = 0.0) {
         const ctx = this.ctx;
         const loopType = analyzer.loopType || 'open';
         const chars = BodeAnalyzer.computeSystemCharacteristics(systemType, physics, loopType, pid);
@@ -235,7 +237,8 @@ export class BodeRenderer {
             // 1. 折れ線漸近線（DCゲイン一定 → ωnから -40dB/dec で下降）
             const wn = Math.max(this.minOmega, Math.min(this.maxOmega, chars.wn));
             const xCorner = this.omegaToX(wn, padLeft, plotW);
-            const yDc = this.gainToY(chars.dcGainDb, gainPlotTop, gainPlotH);
+            const effDcGainDb = chars.dcGainDb + offsetDb;
+            const yDc = this.gainToY(effDcGainDb, gainPlotTop, gainPlotH);
 
             ctx.strokeStyle = this.colors.asymptote;
             ctx.lineWidth = 1.4;
@@ -244,8 +247,8 @@ export class BodeRenderer {
             ctx.moveTo(padLeft, yDc);
             ctx.lineTo(xCorner, yDc);
 
-            // ω_max での漸近値: dcGainDb - 40 * log10(maxOmega / wn)
-            const highGainDb = chars.dcGainDb - 40.0 * Math.log10(Math.max(1.0, this.maxOmega / wn));
+            // ω_max での漸近値: effDcGainDb - 40 * log10(maxOmega / wn)
+            const highGainDb = effDcGainDb - 40.0 * Math.log10(Math.max(1.0, this.maxOmega / wn));
             // グラフ下端との交点をクリッピングして綺麗に描く
             const xEnd = padLeft + plotW;
             const yEnd = this.gainToY(highGainDb, gainPlotTop, gainPlotH);
@@ -340,7 +343,7 @@ export class BodeRenderer {
         ctx.restore();
     }
 
-    drawGridsAndAxes(plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, padLeft, padRight, loopType = 'open') {
+    drawGridsAndAxes(plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, padLeft, padRight, loopType = 'open', isNormalized = false) {
         const ctx = this.ctx;
         const w = this.width;
 
@@ -374,7 +377,7 @@ export class BodeRenderer {
 
         gainTicks.forEach(gVal => {
             const y = this.gainToY(gVal, gainPlotTop, gainPlotH);
-            ctx.strokeStyle = gVal === 0 ? (loopType === 'closed' ? 'rgba(16, 185, 129, 0.6)' : this.colors.zeroLine) : this.colors.grid;
+            ctx.strokeStyle = gVal === 0 ? ((loopType === 'closed' || isNormalized) ? 'rgba(16, 185, 129, 0.65)' : this.colors.zeroLine) : this.colors.grid;
             ctx.lineWidth = gVal === 0 ? 1.5 : 1;
             ctx.beginPath();
             ctx.moveTo(padLeft, y);
@@ -412,7 +415,7 @@ export class BodeRenderer {
         ctx.fillText('ω [rad/s]', w - padRight, phasePlotTop + phasePlotH + 5);
     }
 
-    drawTheoreticalCurves(systemType, physics, loopType, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH) {
+    drawTheoreticalCurves(systemType, physics, loopType, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, offsetDb = 0.0) {
         // 対数等間隔に120点サンプリングして理論曲線を生成
         const N = 120;
         const omegaRange = [];
@@ -437,7 +440,7 @@ export class BodeRenderer {
         for (let i = 0; i < theoretical.length; i++) {
             const pt = theoretical[i];
             const x = this.omegaToX(pt.omega, padLeft, plotW);
-            const y = this.gainToY(pt.gainDb, gainPlotTop, gainPlotH);
+            const y = this.gainToY(pt.gainDb + offsetDb, gainPlotTop, gainPlotH);
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
         }
@@ -457,7 +460,7 @@ export class BodeRenderer {
         ctx.restore();
     }
 
-    drawMeasuredPlots(measurements, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH) {
+    drawMeasuredPlots(measurements, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, offsetDb = 0.0) {
         if (!measurements || measurements.length === 0) return;
 
         const ctx = this.ctx;
@@ -470,7 +473,7 @@ export class BodeRenderer {
         for (let i = 0; i < measurements.length; i++) {
             const pt = measurements[i];
             const x = this.omegaToX(pt.omega, padLeft, plotW);
-            const y = this.gainToY(pt.gainDb, gainPlotTop, gainPlotH);
+            const y = this.gainToY(pt.gainDb + offsetDb, gainPlotTop, gainPlotH);
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
         }
@@ -490,7 +493,7 @@ export class BodeRenderer {
         // 実測データ点マーカー
         measurements.forEach(pt => {
             const x = this.omegaToX(pt.omega, padLeft, plotW);
-            const yGain = this.gainToY(pt.gainDb, gainPlotTop, gainPlotH);
+            const yGain = this.gainToY(pt.gainDb + offsetDb, gainPlotTop, gainPlotH);
             const yPhase = this.phaseToY(pt.phaseDeg, phasePlotTop, phasePlotH);
 
             // ゲイン点
@@ -510,7 +513,7 @@ export class BodeRenderer {
         ctx.restore();
     }
 
-    drawCurrentCursor(analyzer, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH) {
+    drawCurrentCursor(analyzer, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, offsetDb = 0.0) {
         const ctx = this.ctx;
         const curOmega = analyzer.omega;
         const x = this.omegaToX(curOmega, padLeft, plotW);
@@ -531,7 +534,7 @@ export class BodeRenderer {
 
         // 現在の推定ゲイン・位相マーカー（光るリング）
         if (analyzer.currentAmpOut > 0.001) {
-            const curYGain = this.gainToY(analyzer.currentGainDb, gainPlotTop, gainPlotH);
+            const curYGain = this.gainToY(analyzer.currentGainDb + offsetDb, gainPlotTop, gainPlotH);
             const curYPhase = this.phaseToY(analyzer.currentPhaseDeg, phasePlotTop, phasePlotH);
 
             ctx.strokeStyle = this.colors.cursor;
@@ -556,7 +559,7 @@ export class BodeRenderer {
         ctx.restore();
     }
 
-    drawLegend(analyzer, padLeft, gainPlotTop, phasePlotTop) {
+    drawLegend(analyzer, padLeft, gainPlotTop, phasePlotTop, isNormalized = false) {
         const ctx = this.ctx;
         ctx.font = '10px sans-serif';
         ctx.textBaseline = 'top';
@@ -564,14 +567,16 @@ export class BodeRenderer {
         // ゲイン線図タイトル
         ctx.fillStyle = '#f8fafc';
         ctx.textAlign = 'left';
-        ctx.fillText('ゲイン線図 [dB]', padLeft + 6, gainPlotTop + 5);
+        const gainTitle = isNormalized ? 'ゲイン線図 [dB] (DC正規化)' : 'ゲイン線図 [dB]';
+        ctx.fillText(gainTitle, padLeft + 6, gainPlotTop + 5);
 
         // 凡例
+        const legendOffsetX = isNormalized ? 154 : 94;
         ctx.fillStyle = 'rgba(56, 189, 248, 0.85)';
-        ctx.fillText('-- 理論', padLeft + 94, gainPlotTop + 5);
+        ctx.fillText('-- 理論', padLeft + legendOffsetX, gainPlotTop + 5);
 
         ctx.fillStyle = '#34d399';
-        ctx.fillText('―● 実測', padLeft + 140, gainPlotTop + 5);
+        ctx.fillText('―● 実測', padLeft + legendOffsetX + 46, gainPlotTop + 5);
 
         // 位相線図タイトル
         ctx.fillStyle = '#f8fafc';

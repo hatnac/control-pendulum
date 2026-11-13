@@ -253,6 +253,7 @@ class ControlApp {
         this.btnBodeRecord = document.getElementById('btn-bode-record');
         this.btnBodeTogglePhasor = document.getElementById('btn-bode-toggle-phasor');
         this.btnBodeToggleGuide = document.getElementById('btn-bode-toggle-guide');
+        this.btnBodeToggleDcNorm = document.getElementById('btn-bode-toggle-dc-norm');
         this.btnBodeClear = document.getElementById('btn-bode-clear');
         this.bodeHudGain = document.getElementById('bode-hud-gain');
         this.bodeHudPhase = document.getElementById('bode-hud-phase');
@@ -466,6 +467,14 @@ class ControlApp {
                 this.bodeRenderer.showGuide = !this.bodeRenderer.showGuide;
                 this.btnBodeToggleGuide.classList.toggle('active', this.bodeRenderer.showGuide);
                 this.btnBodeToggleGuide.textContent = this.bodeRenderer.showGuide ? '📖 ガイド ON' : '📖 ガイド OFF';
+            });
+        }
+
+        // 開ループ DCゲイン正規化表示トグル
+        if (this.btnBodeToggleDcNorm) {
+            this.btnBodeToggleDcNorm.addEventListener('click', () => {
+                this.bodeAnalyzer.setNormalizeDcGain(!this.bodeAnalyzer.normalizeDcGain);
+                this.updateBodeUI();
             });
         }
 
@@ -1051,10 +1060,29 @@ class ControlApp {
             this.currentPID
         );
 
+        if (this.btnBodeToggleDcNorm) {
+            this.btnBodeToggleDcNorm.disabled = isClosed;
+            if (isClosed) {
+                this.btnBodeToggleDcNorm.classList.remove('active');
+                this.btnBodeToggleDcNorm.textContent = '⚖️ DC正規化 (閉ループ不要)';
+            } else {
+                const isDcRequested = this.bodeAnalyzer.normalizeDcGain;
+                this.btnBodeToggleDcNorm.classList.toggle('active', isDcRequested && insight.isDcNormalized);
+                if (isDcRequested && !insight.isDcNormalized) {
+                    this.btnBodeToggleDcNorm.textContent = '⚖️ DC正規化 (静的基準なし)';
+                } else {
+                    this.btnBodeToggleDcNorm.textContent = isDcRequested
+                        ? '⚖️ DC正規化 (0dB基準) ON'
+                        : '⚖️ DC正規化 (0dB基準) OFF';
+                }
+            }
+        }
+
         if (this.bodeHudGain) {
             if (this.bodeAnalyzer.currentAmpOut > 0.001) {
-                const ratio = Math.pow(10, this.bodeAnalyzer.currentGainDb / 20.0);
-                this.bodeHudGain.textContent = `ゲイン: ${this.bodeAnalyzer.currentGainDb.toFixed(1)} dB (×${ratio.toFixed(2)})`;
+                const dispDb = this.bodeAnalyzer.currentGainDb + insight.displayOffsetDb;
+                const ratio = Math.pow(10, dispDb / 20.0);
+                this.bodeHudGain.textContent = `ゲイン: ${dispDb.toFixed(1)} dB (×${ratio.toFixed(2)})`;
             } else {
                 this.bodeHudGain.textContent = 'ゲイン: -- dB';
             }
@@ -1080,7 +1108,9 @@ class ControlApp {
         }
         if (this.nyquistChartSub && this.nyquistRenderer) {
             if (!isClosed) {
-                this.nyquistChartSub.textContent = 'G(jω) 複素平面';
+                this.nyquistChartSub.textContent = insight.isDcNormalized
+                    ? 'G(jω)/G(0) 正規化複素平面'
+                    : 'G(jω) 複素平面';
             } else {
                 this.nyquistChartSub.textContent = this.nyquistRenderer.nyquistMode === 'loop'
                     ? 'L(jω) 一巡安定余裕'

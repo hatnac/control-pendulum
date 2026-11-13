@@ -1332,6 +1332,9 @@ input[type="range"] {
                         <button id="btn-bode-toggle-guide" class="btn btn-toggle active" title="ボード線図上の領域色分けと漸近線ガイドの表示切替">
                             📖 ガイド ON
                         </button>
+                        <button id="btn-bode-toggle-dc-norm" class="btn btn-toggle" title="開ループ時に静的DCゲイン(1/K)で割って、低周波 ω→0 を 0 dB に揃えて表示します（教科書基準）">
+                            ⚖️ DC正規化 (0dB基準) OFF
+                        </button>
                         <button id="btn-bode-clear" class="btn btn-danger" title="ボード線図の測定プロットを消去します">
                             ↺ プロット消去
                         </button>
@@ -3557,9 +3560,11 @@ class ControlCharts {
             ctx.fillText(isClosedBode ? '--- 目標正弦波 r(t)' : '--- 正弦波入力 u(t)', padLeft + 80, padTop - 8);
 
             if (bodeAnalyzer.currentAmpOut > 0.001 && !showPhasor) {
-                const ampRatio = Math.pow(10, bodeAnalyzer.currentGainDb / 20.0);
+                const offsetDb = bodeAnalyzer.getDisplayGainOffsetDb ? bodeAnalyzer.getDisplayGainOffsetDb(this.systemMode, physics) : 0.0;
+                const dispGainDb = bodeAnalyzer.currentGainDb + offsetDb;
+                const ampRatio = Math.pow(10, dispGainDb / 20.0);
                 ctx.fillStyle = '#eab308';
-                ctx.fillText(`×${ampRatio.toFixed(2)} (${bodeAnalyzer.currentGainDb.toFixed(1)}dB) φ=${bodeAnalyzer.currentPhaseDeg.toFixed(0)}°`, padLeft + 195, padTop - 8);
+                ctx.fillText(`×${ampRatio.toFixed(2)} (${dispGainDb.toFixed(1)}dB) φ=${bodeAnalyzer.currentPhaseDeg.toFixed(0)}°`, padLeft + 195, padTop - 8);
             }
         } else if (isTransient) {
             // 過渡応答モードの凡例
@@ -3692,7 +3697,7 @@ class ControlCharts {
 
             // 4. 正弦波モード時の振幅ガイド＆位相差 Δt アノテーション
             if (isBode) {
-                this.drawBodeAnnotations(ctx, padLeft, plotW, plotH, padTop, zeroY, isPendulum, bodeAnalyzer, idxToX, valToY, isClosedBode);
+                this.drawBodeAnnotations(ctx, padLeft, plotW, plotH, padTop, zeroY, isPendulum, bodeAnalyzer, idxToX, valToY, isClosedBode, physics);
             }
 
             // 5. 過渡応答モード時のアノテーション
@@ -3843,7 +3848,7 @@ class ControlCharts {
     /**
      * 正弦波モードにおける振幅比と位相遅れ Δt の図解アノテーション描画
      */
-    drawBodeAnnotations(ctx, padLeft, plotW, plotH, padTop, zeroY, isPendulum, bodeAnalyzer, idxToX, valToY, isClosedBode) {
+    drawBodeAnnotations(ctx, padLeft, plotW, plotH, padTop, zeroY, isPendulum, bodeAnalyzer, idxToX, valToY, isClosedBode, physics = null) {
         ctx.save();
 
         // 1. 出力ピーク値の水平ガイドライン
@@ -3877,8 +3882,10 @@ class ControlCharts {
             ctx.textAlign = 'right';
             const unit = isPendulum ? '°' : 'm';
             const ampStr = isPendulum ? (ampOut * 180 / Math.PI).toFixed(1) : ampOut.toFixed(3);
-            const ampRatio = Math.pow(10, bodeAnalyzer.currentGainDb / 20.0);
-            const ratioLabel = isClosedBode ? ` (倍率 ×${ampRatio.toFixed(2)})` : '';
+            const offsetDb = (bodeAnalyzer.getDisplayGainOffsetDb && physics) ? bodeAnalyzer.getDisplayGainOffsetDb(this.systemMode, physics) : 0.0;
+            const isDcNorm = (bodeAnalyzer.isDcNormalizedActive && physics) ? bodeAnalyzer.isDcNormalizedActive(this.systemMode, physics) : false;
+            const ampRatio = Math.pow(10, (bodeAnalyzer.currentGainDb + offsetDb) / 20.0);
+            const ratioLabel = (isClosedBode || isDcNorm) ? ` (倍率 ×${ampRatio.toFixed(2)})` : '';
             ctx.fillText(`+Aout: ${ampStr}${unit}${ratioLabel}`, padLeft + plotW - 4, Math.max(padTop + 10, yTop - 4));
         }
 
@@ -4377,6 +4384,9 @@ class BodeAnalyzer {
         // 制御ループ種別 ('open': 外力加振開ループ | 'closed': PID目標追従閉ループ)
         this.loopType = 'open';
 
+        // 開ループ時の DCゲイン正規化表示フラグ (G(j0)=0dB 基準で表示するか)
+        this.normalizeDcGain = false;
+
         // リアルタイム直交検波（Fourier相関法による振幅・位相推定）
         this.sampleBuffer = [];    // { t, u, y } のリングバッファ
         this.fourierBuffer = [];
@@ -4416,6 +4426,38 @@ class BodeAnalyzer {
             this.clearMeasurements();
             this.resetBuffers();
         }
+    }
+
+    /**
+     * 開ループ時の DCゲイン正規化表示の切り替え (true で G(j0) を 0 dB に揃えて表示)
+     */
+    setNormalizeDcGain(enabled) {
+        this.normalizeDcGain = !!enabled;
+    }
+
+    /**
+     * 現在 DCゲイン正規化表示が有効かつ物理的に定義可能かどうか
+     */
+    isDcNormalizedActive(systemType, physics) {
+        if (!this.normalizeDcGain || this.loopType !== 'open' || !physics) {
+            return false;
+        }
+        if (systemType === 'msd') {
+            return (physics.k ?? 0) > 1e-4;
+        }
+        // pendulum: 復元トルク係数 m*g*l が正のときのみ静的DCゲインが有限に定義される
+        return ((physics.m ?? 0) * (physics.g ?? 0) * (physics.l ?? 0)) > 1e-4;
+    }
+
+    /**
+     * 表示用ゲインの dB オフセットを取得 (正規化有効時は -dcGainDb、それ以外は 0)
+     */
+    getDisplayGainOffsetDb(systemType, physics) {
+        if (!this.isDcNormalizedActive(systemType, physics)) {
+            return 0.0;
+        }
+        const chars = BodeAnalyzer.computeSystemCharacteristics(systemType, physics, 'open', null);
+        return -chars.dcGainDb;
     }
 
     /**
@@ -4793,6 +4835,10 @@ class BodeAnalyzer {
         const ampRatio = Math.pow(10, gainDb / 20.0);
         const staticAmp = this.amplitude * chars.dcGain;
         const staticAmpRatio = staticAmp > 1e-5 ? (ampRatio * this.amplitude) / staticAmp : 1.0;
+        const isDcNormalized = this.isDcNormalizedActive(systemType, physics);
+        const displayOffsetDb = isDcNormalized ? -chars.dcGainDb : 0.0;
+        const displayGainDb = gainDb + displayOffsetDb;
+        const displayAmpRatio = Math.pow(10, displayGainDb / 20.0);
 
         // 周期の分数としての遅れ表現
         const absPhase = Math.abs(phaseDeg);
@@ -4860,6 +4906,10 @@ class BodeAnalyzer {
             ampRatio,
             staticAmp,
             staticAmpRatio,
+            isDcNormalized,
+            displayOffsetDb,
+            displayGainDb,
+            displayAmpRatio,
             cycleDelayLabel,
             region,
             regionLabel,
@@ -5022,6 +5072,8 @@ class BodeRenderer {
         const phasePlotTop = padTop + gainPlotH + gap;
 
         const loopType = analyzer.loopType || 'open';
+        const offsetDb = analyzer.getDisplayGainOffsetDb ? analyzer.getDisplayGainOffsetDb(systemType, physics) : 0.0;
+        const isNormalized = analyzer.isDcNormalizedActive ? analyzer.isDcNormalizedActive(systemType, physics) : false;
 
         // 0. 学習ガイド（3領域背景色分け）
         if (this.showGuide) {
@@ -5029,24 +5081,24 @@ class BodeRenderer {
         }
 
         // 1. グリッドと目盛り
-        this.drawGridsAndAxes(plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, padLeft, padRight, loopType);
+        this.drawGridsAndAxes(plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, padLeft, padRight, loopType, isNormalized);
 
         // 2. 学習ガイド（漸近線・共振点/帯域幅マーカー）
         if (this.showGuide) {
-            this.drawLearningOverlays(analyzer, systemType, physics, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH);
+            this.drawLearningOverlays(analyzer, systemType, physics, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, offsetDb);
         }
 
         // 3. 理論曲線の描画（高解像度サンプル）
-        this.drawTheoreticalCurves(systemType, physics, loopType, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH);
+        this.drawTheoreticalCurves(systemType, physics, loopType, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, offsetDb);
 
         // 4. 実測プロット点の描画
-        this.drawMeasuredPlots(analyzer.measurements, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH);
+        this.drawMeasuredPlots(analyzer.measurements, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, offsetDb);
 
         // 5. 現在入力中の周波数カーソル＆リアルタイム点
-        this.drawCurrentCursor(analyzer, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH);
+        this.drawCurrentCursor(analyzer, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, offsetDb);
 
         // 6. 凡例＆HUD
-        this.drawLegend(analyzer, padLeft, gainPlotTop, phasePlotTop);
+        this.drawLegend(analyzer, padLeft, gainPlotTop, phasePlotTop, isNormalized);
     }
 
     drawRegionBackgrounds(analyzer, systemType, physics, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH) {
@@ -5096,7 +5148,7 @@ class BodeRenderer {
         ctx.restore();
     }
 
-    drawLearningOverlays(analyzer, systemType, physics, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH) {
+    drawLearningOverlays(analyzer, systemType, physics, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, offsetDb = 0.0) {
         const ctx = this.ctx;
         const loopType = analyzer.loopType || 'open';
         const chars = BodeAnalyzer.computeSystemCharacteristics(systemType, physics, loopType, pid);
@@ -5106,7 +5158,8 @@ class BodeRenderer {
             // 1. 折れ線漸近線（DCゲイン一定 → ωnから -40dB/dec で下降）
             const wn = Math.max(this.minOmega, Math.min(this.maxOmega, chars.wn));
             const xCorner = this.omegaToX(wn, padLeft, plotW);
-            const yDc = this.gainToY(chars.dcGainDb, gainPlotTop, gainPlotH);
+            const effDcGainDb = chars.dcGainDb + offsetDb;
+            const yDc = this.gainToY(effDcGainDb, gainPlotTop, gainPlotH);
 
             ctx.strokeStyle = this.colors.asymptote;
             ctx.lineWidth = 1.4;
@@ -5115,8 +5168,8 @@ class BodeRenderer {
             ctx.moveTo(padLeft, yDc);
             ctx.lineTo(xCorner, yDc);
 
-            // ω_max での漸近値: dcGainDb - 40 * log10(maxOmega / wn)
-            const highGainDb = chars.dcGainDb - 40.0 * Math.log10(Math.max(1.0, this.maxOmega / wn));
+            // ω_max での漸近値: effDcGainDb - 40 * log10(maxOmega / wn)
+            const highGainDb = effDcGainDb - 40.0 * Math.log10(Math.max(1.0, this.maxOmega / wn));
             // グラフ下端との交点をクリッピングして綺麗に描く
             const xEnd = padLeft + plotW;
             const yEnd = this.gainToY(highGainDb, gainPlotTop, gainPlotH);
@@ -5211,7 +5264,7 @@ class BodeRenderer {
         ctx.restore();
     }
 
-    drawGridsAndAxes(plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, padLeft, padRight, loopType = 'open') {
+    drawGridsAndAxes(plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, padLeft, padRight, loopType = 'open', isNormalized = false) {
         const ctx = this.ctx;
         const w = this.width;
 
@@ -5245,7 +5298,7 @@ class BodeRenderer {
 
         gainTicks.forEach(gVal => {
             const y = this.gainToY(gVal, gainPlotTop, gainPlotH);
-            ctx.strokeStyle = gVal === 0 ? (loopType === 'closed' ? 'rgba(16, 185, 129, 0.6)' : this.colors.zeroLine) : this.colors.grid;
+            ctx.strokeStyle = gVal === 0 ? ((loopType === 'closed' || isNormalized) ? 'rgba(16, 185, 129, 0.65)' : this.colors.zeroLine) : this.colors.grid;
             ctx.lineWidth = gVal === 0 ? 1.5 : 1;
             ctx.beginPath();
             ctx.moveTo(padLeft, y);
@@ -5283,7 +5336,7 @@ class BodeRenderer {
         ctx.fillText('ω [rad/s]', w - padRight, phasePlotTop + phasePlotH + 5);
     }
 
-    drawTheoreticalCurves(systemType, physics, loopType, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH) {
+    drawTheoreticalCurves(systemType, physics, loopType, pid, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, offsetDb = 0.0) {
         // 対数等間隔に120点サンプリングして理論曲線を生成
         const N = 120;
         const omegaRange = [];
@@ -5308,7 +5361,7 @@ class BodeRenderer {
         for (let i = 0; i < theoretical.length; i++) {
             const pt = theoretical[i];
             const x = this.omegaToX(pt.omega, padLeft, plotW);
-            const y = this.gainToY(pt.gainDb, gainPlotTop, gainPlotH);
+            const y = this.gainToY(pt.gainDb + offsetDb, gainPlotTop, gainPlotH);
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
         }
@@ -5328,7 +5381,7 @@ class BodeRenderer {
         ctx.restore();
     }
 
-    drawMeasuredPlots(measurements, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH) {
+    drawMeasuredPlots(measurements, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, offsetDb = 0.0) {
         if (!measurements || measurements.length === 0) return;
 
         const ctx = this.ctx;
@@ -5341,7 +5394,7 @@ class BodeRenderer {
         for (let i = 0; i < measurements.length; i++) {
             const pt = measurements[i];
             const x = this.omegaToX(pt.omega, padLeft, plotW);
-            const y = this.gainToY(pt.gainDb, gainPlotTop, gainPlotH);
+            const y = this.gainToY(pt.gainDb + offsetDb, gainPlotTop, gainPlotH);
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
         }
@@ -5361,7 +5414,7 @@ class BodeRenderer {
         // 実測データ点マーカー
         measurements.forEach(pt => {
             const x = this.omegaToX(pt.omega, padLeft, plotW);
-            const yGain = this.gainToY(pt.gainDb, gainPlotTop, gainPlotH);
+            const yGain = this.gainToY(pt.gainDb + offsetDb, gainPlotTop, gainPlotH);
             const yPhase = this.phaseToY(pt.phaseDeg, phasePlotTop, phasePlotH);
 
             // ゲイン点
@@ -5381,7 +5434,7 @@ class BodeRenderer {
         ctx.restore();
     }
 
-    drawCurrentCursor(analyzer, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH) {
+    drawCurrentCursor(analyzer, padLeft, plotW, gainPlotTop, gainPlotH, phasePlotTop, phasePlotH, offsetDb = 0.0) {
         const ctx = this.ctx;
         const curOmega = analyzer.omega;
         const x = this.omegaToX(curOmega, padLeft, plotW);
@@ -5402,7 +5455,7 @@ class BodeRenderer {
 
         // 現在の推定ゲイン・位相マーカー（光るリング）
         if (analyzer.currentAmpOut > 0.001) {
-            const curYGain = this.gainToY(analyzer.currentGainDb, gainPlotTop, gainPlotH);
+            const curYGain = this.gainToY(analyzer.currentGainDb + offsetDb, gainPlotTop, gainPlotH);
             const curYPhase = this.phaseToY(analyzer.currentPhaseDeg, phasePlotTop, phasePlotH);
 
             ctx.strokeStyle = this.colors.cursor;
@@ -5427,7 +5480,7 @@ class BodeRenderer {
         ctx.restore();
     }
 
-    drawLegend(analyzer, padLeft, gainPlotTop, phasePlotTop) {
+    drawLegend(analyzer, padLeft, gainPlotTop, phasePlotTop, isNormalized = false) {
         const ctx = this.ctx;
         ctx.font = '10px sans-serif';
         ctx.textBaseline = 'top';
@@ -5435,14 +5488,16 @@ class BodeRenderer {
         // ゲイン線図タイトル
         ctx.fillStyle = '#f8fafc';
         ctx.textAlign = 'left';
-        ctx.fillText('ゲイン線図 [dB]', padLeft + 6, gainPlotTop + 5);
+        const gainTitle = isNormalized ? 'ゲイン線図 [dB] (DC正規化)' : 'ゲイン線図 [dB]';
+        ctx.fillText(gainTitle, padLeft + 6, gainPlotTop + 5);
 
         // 凡例
+        const legendOffsetX = isNormalized ? 154 : 94;
         ctx.fillStyle = 'rgba(56, 189, 248, 0.85)';
-        ctx.fillText('-- 理論', padLeft + 94, gainPlotTop + 5);
+        ctx.fillText('-- 理論', padLeft + legendOffsetX, gainPlotTop + 5);
 
         ctx.fillStyle = '#34d399';
-        ctx.fillText('―● 実測', padLeft + 140, gainPlotTop + 5);
+        ctx.fillText('―● 実測', padLeft + legendOffsetX + 46, gainPlotTop + 5);
 
         // 位相線図タイトル
         ctx.fillStyle = '#f8fafc';
@@ -5539,6 +5594,14 @@ class NyquistRenderer {
     computeCurvePoints(analyzer, systemType, physics, pid) {
         const isClosed = (analyzer.loopType || 'open') === 'closed';
         const isLoopL = isClosed && this.nyquistMode === 'loop';
+        const isNormalized = !isClosed && (analyzer.isDcNormalizedActive ? analyzer.isDcNormalizedActive(systemType, physics) : false);
+        let scale = 1.0;
+        let offsetDb = 0.0;
+        if (isNormalized) {
+            const chars = BodeAnalyzer.computeSystemCharacteristics(systemType, physics, 'open', null);
+            scale = 1.0 / Math.max(1e-6, chars.dcGain);
+            offsetDb = -chars.dcGainDb;
+        }
 
         const N = 180;
         const wMin = 0.05;
@@ -5552,9 +5615,20 @@ class NyquistRenderer {
             const pt = isLoopL
                 ? BodeAnalyzer.evaluateOpenLoopL(w, systemType, physics, pid)
                 : BodeAnalyzer.evaluatePoint(w, systemType, physics, isClosed ? 'closed' : 'open', pid);
-            pts.push(pt);
+            if (isNormalized) {
+                pts.push({
+                    omega: pt.omega,
+                    re: pt.re * scale,
+                    im: pt.im * scale,
+                    gain: pt.gain * scale,
+                    gainDb: pt.gainDb + offsetDb,
+                    phaseDeg: pt.phaseDeg
+                });
+            } else {
+                pts.push(pt);
+            }
         }
-        return { pts, isClosed, isLoopL };
+        return { pts, isClosed, isLoopL, isNormalized, scale };
     }
 
     /**
@@ -5621,20 +5695,21 @@ class NyquistRenderer {
         const plotCenterX = padLeft + plotW * 0.5;
         const plotCenterY = padTop + plotH * 0.5;
 
-        const { pts, isClosed, isLoopL } = this.computeCurvePoints(analyzer, systemType, physics, pid);
+        const { pts, isClosed, isLoopL, isNormalized, scale } = this.computeCurvePoints(analyzer, systemType, physics, pid);
         this.lastCurvePoints = pts;
 
         const chars = BodeAnalyzer.computeSystemCharacteristics(systemType, physics, isClosed ? 'closed' : 'open', pid);
+        const effDcGain = isNormalized ? 1.0 : chars.dcGain;
 
         // バウンディングボックス計算（極端な発散点を除外しつつ主要範囲を確保）
         const capRadius = isLoopL
             ? 3.8
-            : (isClosed ? 3.5 : Math.max(0.5, chars.dcGain * 6.5));
+            : (isClosed ? 3.5 : Math.max(0.5, effDcGain * 6.5));
 
-        let minRe = isLoopL ? -1.4 : (isClosed ? -0.3 : -chars.dcGain * 0.3);
-        let maxRe = isLoopL ? 0.8 : (isClosed ? 1.25 : Math.max(0.05, chars.dcGain * 1.15));
-        let minIm = isLoopL ? -2.2 : (isClosed ? -0.9 : -chars.dcGain * 1.2);
-        let maxIm = isLoopL ? 0.6 : (isClosed ? 0.35 : chars.dcGain * 0.25);
+        let minRe = isLoopL ? -1.4 : (isClosed ? -0.3 : -effDcGain * 0.3);
+        let maxRe = isLoopL ? 0.8 : (isClosed ? 1.25 : Math.max(0.05, effDcGain * 1.15));
+        let minIm = isLoopL ? -2.2 : (isClosed ? -0.9 : -effDcGain * 1.2);
+        let maxIm = isLoopL ? 0.6 : (isClosed ? 0.35 : effDcGain * 0.25);
 
         // 必ず原点 (0,0) を含める
         minRe = Math.min(minRe, 0);
@@ -5709,8 +5784,8 @@ class NyquistRenderer {
         ctx.lineTo(ox, padTop + plotH);
         ctx.stroke();
 
-        // 2. 単位円や基準点（閉ループ T / 一巡 L）
-        if (isClosed) {
+        // 2. 単位円や基準点（閉ループ T / 一巡 L / 開ループ DC正規化）
+        if (isClosed || isNormalized) {
             ctx.strokeStyle = this.colors.unitCircle;
             ctx.lineWidth = 1.1;
             ctx.setLineDash([4, 4]);
@@ -5718,7 +5793,9 @@ class NyquistRenderer {
             ctx.arc(ox, oy, 1.0 * pxPerUnit, 0, Math.PI * 2);
             ctx.stroke();
             ctx.setLineDash([]);
+        }
 
+        if (isClosed) {
             if (isLoopL) {
                 // (-1, j0) ナイキスト臨界点
                 const cxCrit = reToX(-1.0);
@@ -5750,8 +5827,8 @@ class NyquistRenderer {
                 ctx.fillText('理想(1,0)', cxIdeal - 5, cyIdeal - 6);
             }
         } else {
-            // 開ループ: DCゲイン点 (1/K, 0)
-            const cxDc = reToX(chars.dcGain);
+            // 開ループ: DCゲイン点 ((1/K, 0) または正規化時は (1, 0))
+            const cxDc = reToX(effDcGain);
             const cyDc = imToY(0);
             ctx.fillStyle = '#10b981';
             ctx.beginPath();
@@ -5759,7 +5836,7 @@ class NyquistRenderer {
             ctx.fill();
             ctx.font = '9px monospace';
             ctx.textAlign = 'center';
-            ctx.fillText('ω=0', cxDc, cyDc - 7);
+            ctx.fillText(isNormalized ? 'ω=0 (1,0)' : 'ω=0', cxDc, cyDc - 7);
         }
 
         // 3. 理論ベクトル軌跡の描画
@@ -5808,8 +5885,8 @@ class NyquistRenderer {
         // 固有角周波数 ωn (開ループ時) のマーカー
         if (!isClosed && isFinite(chars.wn)) {
             const wnPt = BodeAnalyzer.evaluatePoint(chars.wn, systemType, physics, 'open', null);
-            const wx = reToX(wnPt.re);
-            const wy = imToY(wnPt.im);
+            const wx = reToX(wnPt.re * scale);
+            const wy = imToY(wnPt.im * scale);
             if (wy >= padTop && wy <= padTop + plotH) {
                 ctx.fillStyle = '#38bdf8';
                 ctx.beginPath();
@@ -5825,7 +5902,7 @@ class NyquistRenderer {
         if (!isLoopL && analyzer.measurements && analyzer.measurements.length > 0) {
             ctx.fillStyle = this.colors.measured;
             for (const mPt of analyzer.measurements) {
-                const mag = Math.pow(10, mPt.gainDb / 20.0);
+                const mag = Math.pow(10, mPt.gainDb / 20.0) * scale;
                 const rad = (mPt.phaseDeg * Math.PI) / 180.0;
                 const re = mag * Math.cos(rad);
                 const im = mag * Math.sin(rad);
@@ -5838,9 +5915,12 @@ class NyquistRenderer {
         }
 
         // 5. 現在周波数 ω の位置ベクトル矢印（原点 -> G(jω)）と位相差扇形
-        const curPt = isLoopL
+        const rawCurPt = isLoopL
             ? BodeAnalyzer.evaluateOpenLoopL(analyzer.omega, systemType, physics, pid)
             : BodeAnalyzer.evaluatePoint(analyzer.omega, systemType, physics, isClosed ? 'closed' : 'open', pid);
+        const curPt = isNormalized
+            ? { ...rawCurPt, re: rawCurPt.re * scale, im: rawCurPt.im * scale, gain: rawCurPt.gain * scale }
+            : rawCurPt;
 
         if (isFinite(curPt.re) && isFinite(curPt.im)) {
             const cxCur = reToX(curPt.re);
@@ -5932,7 +6012,7 @@ class NyquistRenderer {
         ctx.font = 'bold 9px monospace';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'top';
-        const sym = isLoopL ? 'L' : (isClosed ? 'T' : 'G');
+        const sym = isLoopL ? 'L' : (isClosed ? 'T' : (isNormalized ? 'G/G0' : 'G'));
         if (w < 420) {
             ctx.fillText(
                 `${sym}(j${analyzer.omega.toFixed(2)}): |${curPt.gain.toFixed(3)}| ∠${curPt.phaseDeg.toFixed(0)}°`,
@@ -6587,6 +6667,7 @@ class ControlApp {
         this.btnBodeRecord = document.getElementById('btn-bode-record');
         this.btnBodeTogglePhasor = document.getElementById('btn-bode-toggle-phasor');
         this.btnBodeToggleGuide = document.getElementById('btn-bode-toggle-guide');
+        this.btnBodeToggleDcNorm = document.getElementById('btn-bode-toggle-dc-norm');
         this.btnBodeClear = document.getElementById('btn-bode-clear');
         this.bodeHudGain = document.getElementById('bode-hud-gain');
         this.bodeHudPhase = document.getElementById('bode-hud-phase');
@@ -6800,6 +6881,14 @@ class ControlApp {
                 this.bodeRenderer.showGuide = !this.bodeRenderer.showGuide;
                 this.btnBodeToggleGuide.classList.toggle('active', this.bodeRenderer.showGuide);
                 this.btnBodeToggleGuide.textContent = this.bodeRenderer.showGuide ? '📖 ガイド ON' : '📖 ガイド OFF';
+            });
+        }
+
+        // 開ループ DCゲイン正規化表示トグル
+        if (this.btnBodeToggleDcNorm) {
+            this.btnBodeToggleDcNorm.addEventListener('click', () => {
+                this.bodeAnalyzer.setNormalizeDcGain(!this.bodeAnalyzer.normalizeDcGain);
+                this.updateBodeUI();
             });
         }
 
@@ -7385,10 +7474,29 @@ class ControlApp {
             this.currentPID
         );
 
+        if (this.btnBodeToggleDcNorm) {
+            this.btnBodeToggleDcNorm.disabled = isClosed;
+            if (isClosed) {
+                this.btnBodeToggleDcNorm.classList.remove('active');
+                this.btnBodeToggleDcNorm.textContent = '⚖️ DC正規化 (閉ループ不要)';
+            } else {
+                const isDcRequested = this.bodeAnalyzer.normalizeDcGain;
+                this.btnBodeToggleDcNorm.classList.toggle('active', isDcRequested && insight.isDcNormalized);
+                if (isDcRequested && !insight.isDcNormalized) {
+                    this.btnBodeToggleDcNorm.textContent = '⚖️ DC正規化 (静的基準なし)';
+                } else {
+                    this.btnBodeToggleDcNorm.textContent = isDcRequested
+                        ? '⚖️ DC正規化 (0dB基準) ON'
+                        : '⚖️ DC正規化 (0dB基準) OFF';
+                }
+            }
+        }
+
         if (this.bodeHudGain) {
             if (this.bodeAnalyzer.currentAmpOut > 0.001) {
-                const ratio = Math.pow(10, this.bodeAnalyzer.currentGainDb / 20.0);
-                this.bodeHudGain.textContent = `ゲイン: ${this.bodeAnalyzer.currentGainDb.toFixed(1)} dB (×${ratio.toFixed(2)})`;
+                const dispDb = this.bodeAnalyzer.currentGainDb + insight.displayOffsetDb;
+                const ratio = Math.pow(10, dispDb / 20.0);
+                this.bodeHudGain.textContent = `ゲイン: ${dispDb.toFixed(1)} dB (×${ratio.toFixed(2)})`;
             } else {
                 this.bodeHudGain.textContent = 'ゲイン: -- dB';
             }
@@ -7414,7 +7522,9 @@ class ControlApp {
         }
         if (this.nyquistChartSub && this.nyquistRenderer) {
             if (!isClosed) {
-                this.nyquistChartSub.textContent = 'G(jω) 複素平面';
+                this.nyquistChartSub.textContent = insight.isDcNormalized
+                    ? 'G(jω)/G(0) 正規化複素平面'
+                    : 'G(jω) 複素平面';
             } else {
                 this.nyquistChartSub.textContent = this.nyquistRenderer.nyquistMode === 'loop'
                     ? 'L(jω) 一巡安定余裕'

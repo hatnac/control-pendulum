@@ -13,6 +13,9 @@ export class BodeAnalyzer {
         // 制御ループ種別 ('open': 外力加振開ループ | 'closed': PID目標追従閉ループ)
         this.loopType = 'open';
 
+        // 開ループ時の DCゲイン正規化表示フラグ (G(j0)=0dB 基準で表示するか)
+        this.normalizeDcGain = false;
+
         // リアルタイム直交検波（Fourier相関法による振幅・位相推定）
         this.sampleBuffer = [];    // { t, u, y } のリングバッファ
         this.fourierBuffer = [];
@@ -52,6 +55,38 @@ export class BodeAnalyzer {
             this.clearMeasurements();
             this.resetBuffers();
         }
+    }
+
+    /**
+     * 開ループ時の DCゲイン正規化表示の切り替え (true で G(j0) を 0 dB に揃えて表示)
+     */
+    setNormalizeDcGain(enabled) {
+        this.normalizeDcGain = !!enabled;
+    }
+
+    /**
+     * 現在 DCゲイン正規化表示が有効かつ物理的に定義可能かどうか
+     */
+    isDcNormalizedActive(systemType, physics) {
+        if (!this.normalizeDcGain || this.loopType !== 'open' || !physics) {
+            return false;
+        }
+        if (systemType === 'msd') {
+            return (physics.k ?? 0) > 1e-4;
+        }
+        // pendulum: 復元トルク係数 m*g*l が正のときのみ静的DCゲインが有限に定義される
+        return ((physics.m ?? 0) * (physics.g ?? 0) * (physics.l ?? 0)) > 1e-4;
+    }
+
+    /**
+     * 表示用ゲインの dB オフセットを取得 (正規化有効時は -dcGainDb、それ以外は 0)
+     */
+    getDisplayGainOffsetDb(systemType, physics) {
+        if (!this.isDcNormalizedActive(systemType, physics)) {
+            return 0.0;
+        }
+        const chars = BodeAnalyzer.computeSystemCharacteristics(systemType, physics, 'open', null);
+        return -chars.dcGainDb;
     }
 
     /**
@@ -429,6 +464,10 @@ export class BodeAnalyzer {
         const ampRatio = Math.pow(10, gainDb / 20.0);
         const staticAmp = this.amplitude * chars.dcGain;
         const staticAmpRatio = staticAmp > 1e-5 ? (ampRatio * this.amplitude) / staticAmp : 1.0;
+        const isDcNormalized = this.isDcNormalizedActive(systemType, physics);
+        const displayOffsetDb = isDcNormalized ? -chars.dcGainDb : 0.0;
+        const displayGainDb = gainDb + displayOffsetDb;
+        const displayAmpRatio = Math.pow(10, displayGainDb / 20.0);
 
         // 周期の分数としての遅れ表現
         const absPhase = Math.abs(phaseDeg);
@@ -496,6 +535,10 @@ export class BodeAnalyzer {
             ampRatio,
             staticAmp,
             staticAmpRatio,
+            isDcNormalized,
+            displayOffsetDb,
+            displayGainDb,
+            displayAmpRatio,
             cycleDelayLabel,
             region,
             regionLabel,

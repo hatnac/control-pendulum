@@ -284,9 +284,11 @@ export class ControlCharts {
             ctx.fillText(isClosedBode ? '--- 目標正弦波 r(t)' : '--- 正弦波入力 u(t)', padLeft + 80, padTop - 8);
 
             if (bodeAnalyzer.currentAmpOut > 0.001 && !showPhasor) {
-                const ampRatio = Math.pow(10, bodeAnalyzer.currentGainDb / 20.0);
+                const offsetDb = bodeAnalyzer.getDisplayGainOffsetDb ? bodeAnalyzer.getDisplayGainOffsetDb(this.systemMode, physics) : 0.0;
+                const dispGainDb = bodeAnalyzer.currentGainDb + offsetDb;
+                const ampRatio = Math.pow(10, dispGainDb / 20.0);
                 ctx.fillStyle = '#eab308';
-                ctx.fillText(`×${ampRatio.toFixed(2)} (${bodeAnalyzer.currentGainDb.toFixed(1)}dB) φ=${bodeAnalyzer.currentPhaseDeg.toFixed(0)}°`, padLeft + 195, padTop - 8);
+                ctx.fillText(`×${ampRatio.toFixed(2)} (${dispGainDb.toFixed(1)}dB) φ=${bodeAnalyzer.currentPhaseDeg.toFixed(0)}°`, padLeft + 195, padTop - 8);
             }
         } else if (isTransient) {
             // 過渡応答モードの凡例
@@ -419,7 +421,7 @@ export class ControlCharts {
 
             // 4. 正弦波モード時の振幅ガイド＆位相差 Δt アノテーション
             if (isBode) {
-                this.drawBodeAnnotations(ctx, padLeft, plotW, plotH, padTop, zeroY, isPendulum, bodeAnalyzer, idxToX, valToY, isClosedBode);
+                this.drawBodeAnnotations(ctx, padLeft, plotW, plotH, padTop, zeroY, isPendulum, bodeAnalyzer, idxToX, valToY, isClosedBode, physics);
             }
 
             // 5. 過渡応答モード時のアノテーション
@@ -570,7 +572,7 @@ export class ControlCharts {
     /**
      * 正弦波モードにおける振幅比と位相遅れ Δt の図解アノテーション描画
      */
-    drawBodeAnnotations(ctx, padLeft, plotW, plotH, padTop, zeroY, isPendulum, bodeAnalyzer, idxToX, valToY, isClosedBode) {
+    drawBodeAnnotations(ctx, padLeft, plotW, plotH, padTop, zeroY, isPendulum, bodeAnalyzer, idxToX, valToY, isClosedBode, physics = null) {
         ctx.save();
 
         // 1. 出力ピーク値の水平ガイドライン
@@ -604,8 +606,10 @@ export class ControlCharts {
             ctx.textAlign = 'right';
             const unit = isPendulum ? '°' : 'm';
             const ampStr = isPendulum ? (ampOut * 180 / Math.PI).toFixed(1) : ampOut.toFixed(3);
-            const ampRatio = Math.pow(10, bodeAnalyzer.currentGainDb / 20.0);
-            const ratioLabel = isClosedBode ? ` (倍率 ×${ampRatio.toFixed(2)})` : '';
+            const offsetDb = (bodeAnalyzer.getDisplayGainOffsetDb && physics) ? bodeAnalyzer.getDisplayGainOffsetDb(this.systemMode, physics) : 0.0;
+            const isDcNorm = (bodeAnalyzer.isDcNormalizedActive && physics) ? bodeAnalyzer.isDcNormalizedActive(this.systemMode, physics) : false;
+            const ampRatio = Math.pow(10, (bodeAnalyzer.currentGainDb + offsetDb) / 20.0);
+            const ratioLabel = (isClosedBode || isDcNorm) ? ` (倍率 ×${ampRatio.toFixed(2)})` : '';
             ctx.fillText(`+Aout: ${ampStr}${unit}${ratioLabel}`, padLeft + plotW - 4, Math.max(padTop + 10, yTop - 4));
         }
 
